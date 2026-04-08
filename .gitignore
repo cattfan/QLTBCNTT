@@ -36,3 +36,8 @@ yarn-error.log*
 # Misc
 .DS_Store
 *.pem
+
+# Editor / AI agent files
+.agents/
+.claude/
+skills-lock.json
