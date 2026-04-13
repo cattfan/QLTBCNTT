@@ -50,7 +50,7 @@ export class AuthService {
     };
   }
 
-  async getMe(userId: string): Promise<MeResponseDto> {
+  async getMe(userId: number): Promise<MeResponseDto> {
     const user = await this.usersRepository.findById(userId);
 
     if (!user) {
@@ -63,7 +63,7 @@ export class AuthService {
   }
 
   async changePassword(
-    userId: string,
+    userId: number,
     payload: ChangePasswordDto,
   ): Promise<ChangePasswordResponseDto> {
     const oldPassword = this.requireField(
@@ -119,9 +119,11 @@ export class AuthService {
   private toAuthUser(user: UserRecord): AuthenticatedUser {
     return {
       id: user.id,
-      createdAt: user.createdAt,
       name: user.name,
       username: user.username,
+      email: user.email,
+      role: user.role,
+      departmentId: user.departmentId,
     };
   }
 

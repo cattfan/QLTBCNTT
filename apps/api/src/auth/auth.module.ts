@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import type { JwtSignOptions } from '@nestjs/jwt';
 import { APP_GUARD } from '@nestjs/core';
+import { DatabaseModule } from '../database';
 import { USER_REPOSITORY } from './auth.constants';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
@@ -10,6 +11,7 @@ import { SupabaseUsersRepository } from './supabase-users.repository';
 
 @Module({
   imports: [
+    DatabaseModule,
     JwtModule.registerAsync({
       useFactory: () => ({
         secret: process.env.JWT_SECRET ?? 'dev-only-secret',

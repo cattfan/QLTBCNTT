@@ -1,123 +1,82 @@
-import {
-  Injectable,
-  InternalServerErrorException,
-  ServiceUnavailableException,
-} from '@nestjs/common';
+import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import type { Database } from '@repo/shared';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { SupabaseService } from '../database';
 import type { UsersRepository, UserRecord } from './users.repository';
 
-type SupabaseUserRow = Database['public']['Tables']['users']['Row'];
+type SupabaseUserRow = Pick<
+  Database['public']['Tables']['nguoi_dung']['Row'],
+  | 'id'
+  | 'ho_ten'
+  | 'ten_dang_nhap'
+  | 'email'
+  | 'vai_tro'
+  | 'phong_ban_id'
+  | 'mat_khau'
+>;
 
 @Injectable()
 export class SupabaseUsersRepository implements UsersRepository {
-  async findById(id: string): Promise<UserRecord | null> {
-    const [user] = await this.selectUsers({
-      id: `eq.${id}`,
-      limit: '1',
-    });
+  private readonly client: SupabaseClient;
 
-    return user ?? null;
+  constructor(private readonly supabaseService: SupabaseService) {
+    this.client = this.supabaseService.getClient();
   }
 
-  async findByUsername(username: string): Promise<UserRecord | null> {
-    const [user] = await this.selectUsers({
-      username: `eq.${username}`,
-      limit: '1',
-    });
+  async findById(id: number): Promise<UserRecord | null> {
+    const { data, error } = await this.client
+      .from('nguoi_dung')
+      .select(
+        'id, ho_ten, ten_dang_nhap, email, vai_tro, phong_ban_id, mat_khau',
+      )
+      .eq('id', id)
+      .maybeSingle();
 
-    return user ?? null;
-  }
-
-  async updatePassword(userId: string, passwordHash: string): Promise<void> {
-    const response = await fetch(this.createUsersUrl({ id: `eq.${userId}` }), {
-      method: 'PATCH',
-      headers: this.createHeaders({
-        Prefer: 'return=minimal',
-      }),
-      body: JSON.stringify({
-        password_hash: passwordHash,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new InternalServerErrorException('Unable to update user password');
-    }
-  }
-
-  private async selectUsers(
-    filters: Record<string, string>,
-  ): Promise<UserRecord[]> {
-    const response = await fetch(
-      this.createUsersUrl({
-        select: 'id,created_at,name,username,password_hash',
-        ...filters,
-      }),
-      {
-        method: 'GET',
-        headers: this.createHeaders(),
-      },
-    );
-
-    if (!response.ok) {
+    if (error) {
       throw new InternalServerErrorException('Unable to query users table');
     }
 
-    const rows = (await response.json()) as SupabaseUserRow[];
-    return rows.map((row) => this.mapRow(row));
+    return data ? this.mapRow(data) : null;
+  }
+
+  async findByUsername(username: string): Promise<UserRecord | null> {
+    const { data, error } = await this.client
+      .from('nguoi_dung')
+      .select(
+        'id, ho_ten, ten_dang_nhap, email, vai_tro, phong_ban_id, mat_khau',
+      )
+      .eq('ten_dang_nhap', username)
+      .maybeSingle();
+
+    if (error) {
+      throw new InternalServerErrorException('Unable to query users table');
+    }
+
+    return data ? this.mapRow(data) : null;
+  }
+
+  async updatePassword(userId: number, passwordHash: string): Promise<void> {
+    const { error } = await this.client
+      .from('nguoi_dung')
+      .update({
+        mat_khau: passwordHash,
+      })
+      .eq('id', userId);
+
+    if (error) {
+      throw new InternalServerErrorException('Unable to update user password');
+    }
   }
 
   private mapRow(row: SupabaseUserRow): UserRecord {
     return {
       id: row.id,
-      createdAt: row.created_at,
-      name: row.name,
-      username: row.username,
-      passwordHash: row.password_hash,
+      name: row.ho_ten,
+      username: row.ten_dang_nhap,
+      email: row.email,
+      role: row.vai_tro,
+      departmentId: row.phong_ban_id,
+      passwordHash: row.mat_khau,
     };
-  }
-
-  private createUsersUrl(params: Record<string, string>): string {
-    const url = new URL(`${this.getSupabaseUrl()}/rest/v1/users`);
-
-    for (const [key, value] of Object.entries(params)) {
-      url.searchParams.set(key, value);
-    }
-
-    return url.toString();
-  }
-
-  private createHeaders(extraHeaders: HeadersInit = {}): HeadersInit {
-    const serviceRoleKey = this.getServiceRoleKey();
-
-    return {
-      apikey: serviceRoleKey,
-      Authorization: `Bearer ${serviceRoleKey}`,
-      'Content-Type': 'application/json',
-      ...extraHeaders,
-    };
-  }
-
-  private getSupabaseUrl(): string {
-    const supabaseUrl = process.env.SUPABASE_URL?.trim();
-
-    if (!supabaseUrl) {
-      throw new ServiceUnavailableException('SUPABASE_URL is not configured');
-    }
-
-    return supabaseUrl.replace(/\/+$/, '');
-  }
-
-  private getServiceRoleKey(): string {
-    const serviceRoleKey =
-      process.env.SUPABASE_SERVICE_KEY?.trim() ??
-      process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
-
-    if (!serviceRoleKey) {
-      throw new ServiceUnavailableException(
-        'SUPABASE_SERVICE_KEY or SUPABASE_SERVICE_ROLE_KEY is not configured',
-      );
-    }
-
-    return serviceRoleKey;
   }
 }

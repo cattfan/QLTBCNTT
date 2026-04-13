@@ -2,7 +2,7 @@ import type { AuthUserDto } from '@repo/shared';
 import type { Request } from 'express';
 
 export interface JwtPayload {
-  sub: string;
+  sub: number;
   username: string;
 }
 

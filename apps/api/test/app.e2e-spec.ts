@@ -15,11 +15,12 @@ import type {
   UserRecord,
   UsersRepository,
 } from './../src/auth/users.repository';
+import { SupabaseService } from './../src/database';
 
 class InMemoryUsersRepository implements UsersRepository {
   constructor(private readonly users: UserRecord[]) {}
 
-  findById(id: string): Promise<UserRecord | null> {
+  findById(id: number): Promise<UserRecord | null> {
     return Promise.resolve(this.users.find((user) => user.id === id) ?? null);
   }
 
@@ -29,7 +30,7 @@ class InMemoryUsersRepository implements UsersRepository {
     );
   }
 
-  updatePassword(userId: string, passwordHash: string): Promise<void> {
+  updatePassword(userId: number, passwordHash: string): Promise<void> {
     const user = this.users.find((currentUser) => currentUser.id === userId);
 
     if (!user) {
@@ -51,10 +52,12 @@ describe('AppController (e2e)', () => {
 
     usersRepository = new InMemoryUsersRepository([
       {
-        id: 'user-1',
-        createdAt: '2026-04-13T00:00:00.000Z',
+        id: 1,
         name: 'Administrator',
         username: 'admin',
+        email: 'admin@example.com',
+        role: 'admin',
+        departmentId: 2,
         passwordHash: await bcrypt.hash('old-password', 4),
       },
     ]);
@@ -64,6 +67,10 @@ describe('AppController (e2e)', () => {
     });
 
     moduleBuilder.overrideProvider(USER_REPOSITORY).useValue(usersRepository);
+    moduleBuilder.overrideProvider(SupabaseService).useValue({
+      ping: jest.fn().mockResolvedValue(true),
+      getClient: jest.fn(),
+    });
 
     const moduleFixture: TestingModule = await moduleBuilder.compile();
 
@@ -85,14 +92,17 @@ describe('AppController (e2e)', () => {
       })
       .expect(200);
 
-    const body = response.body as LoginResponseDto;
+    const body = response.body as WrappedResponse<LoginResponseDto>;
 
-    expect(body.accessToken).toEqual(expect.any(String));
-    expect(body.user).toEqual({
-      id: 'user-1',
-      createdAt: '2026-04-13T00:00:00.000Z',
+    expect(body.success).toBe(true);
+    expect(body.data.accessToken).toEqual(expect.any(String));
+    expect(body.data.user).toEqual({
+      id: 1,
       name: 'Administrator',
       username: 'admin',
+      email: 'admin@example.com',
+      role: 'admin',
+      departmentId: 2,
     });
   });
 
@@ -103,13 +113,20 @@ describe('AppController (e2e)', () => {
       .get(`/${API_PREFIX}/auth/me`)
       .set('Authorization', `Bearer ${accessToken}`)
       .expect(200)
-      .expect({
-        user: {
-          id: 'user-1',
-          createdAt: '2026-04-13T00:00:00.000Z',
-          name: 'Administrator',
-          username: 'admin',
-        },
+      .expect((response) => {
+        const body = response.body as WrappedResponse<{ user: UserRecord }>;
+
+        expect(body.success).toBe(true);
+        expect(body.data).toEqual({
+          user: {
+            id: 1,
+            name: 'Administrator',
+            username: 'admin',
+            email: 'admin@example.com',
+            role: 'admin',
+            departmentId: 2,
+          },
+        });
       });
   });
 
@@ -124,8 +141,13 @@ describe('AppController (e2e)', () => {
         newPassword: 'new-password',
       })
       .expect(200)
-      .expect({
-        message: 'Password changed successfully',
+      .expect((response) => {
+        const body = response.body as WrappedResponse<{ message: string }>;
+
+        expect(body.success).toBe(true);
+        expect(body.data).toEqual({
+          message: 'Password changed successfully',
+        });
       });
 
     await request(getHttpServer(app))
@@ -182,10 +204,16 @@ async function login(app: INestApplication): Promise<string> {
     })
     .expect(200);
 
-  const body = response.body as LoginResponseDto;
-  return body.accessToken;
+  const body = response.body as WrappedResponse<LoginResponseDto>;
+  return body.data.accessToken;
 }
 
 function getHttpServer(app: INestApplication): Parameters<typeof request>[0] {
   return app.getHttpServer() as Parameters<typeof request>[0];
+}
+
+interface WrappedResponse<T> {
+  success: boolean;
+  data: T;
+  message: string;
 }

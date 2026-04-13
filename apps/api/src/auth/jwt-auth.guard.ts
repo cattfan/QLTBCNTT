@@ -42,9 +42,11 @@ export class JwtAuthGuard implements CanActivate {
     request.tokenPayload = payload;
     request.user = {
       id: user.id,
-      createdAt: user.createdAt,
       name: user.name,
       username: user.username,
+      email: user.email,
+      role: user.role,
+      departmentId: user.departmentId,
     };
 
     return true;

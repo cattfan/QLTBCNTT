@@ -4,10 +4,12 @@ export interface LoginDto {
 }
 
 export interface AuthUserDto {
-  id: string;
-  createdAt: string;
+  id: number;
   name: string;
   username: string;
+  email: string | null;
+  role: string | null;
+  departmentId: number | null;
 }
 
 export interface LoginResponseDto {

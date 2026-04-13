@@ -1,13 +1,24 @@
-import type { INestApplication } from '@nestjs/common';
+import { ValidationPipe, type INestApplication } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import type { Express, Request, Response } from 'express';
+import { HttpExceptionFilter, TransformInterceptor } from './common';
 
 export const API_PREFIX = 'v1';
 export const OPENAPI_JSON_PATH = `/${API_PREFIX}/openapi.json`;
 export const API_DOCS_PATH = `/${API_PREFIX}/docs`;
 
 export async function setupApp(app: INestApplication): Promise<void> {
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
+  app.useGlobalInterceptors(new TransformInterceptor());
+  app.useGlobalFilters(new HttpExceptionFilter());
+  app.enableCors();
   app.setGlobalPrefix(API_PREFIX);
 
   const openApiDocument = SwaggerModule.createDocument(
