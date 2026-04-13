@@ -4,6 +4,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { DatabaseModule } from './database';
+import { PhongBanModule } from './phong-ban/phong-ban.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { DatabaseModule } from './database';
     }),
     DatabaseModule,
     AuthModule,
+    PhongBanModule,
   ],
   controllers: [AppController],
   providers: [AppService],

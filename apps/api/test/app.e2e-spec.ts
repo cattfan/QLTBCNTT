@@ -1,7 +1,18 @@
-import { INestApplication } from '@nestjs/common';
+import {
+  ConflictException,
+  INestApplication,
+  NotFoundException,
+} from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import * as bcrypt from 'bcrypt';
-import type { LoginResponseDto } from '@repo/shared';
+import type {
+  CreatePhongBanDto,
+  LoginResponseDto,
+  PhongBanDto,
+  PhongBanListResponseDto,
+  PhongBanQueryDto,
+  UpdatePhongBanDto,
+} from '@repo/shared';
 import request from 'supertest';
 import { AppModule } from './../src/app.module';
 import {
@@ -16,6 +27,7 @@ import type {
   UsersRepository,
 } from './../src/auth/users.repository';
 import { SupabaseService } from './../src/database';
+import { PhongBanService } from './../src/phong-ban/phong-ban.service';
 
 class InMemoryUsersRepository implements UsersRepository {
   constructor(private readonly users: UserRecord[]) {}
@@ -42,9 +54,126 @@ class InMemoryUsersRepository implements UsersRepository {
   }
 }
 
+class InMemoryPhongBanService {
+  private readonly linkedDepartmentIds = new Set<number>([2]);
+
+  constructor(private readonly departments: PhongBanDto[]) {}
+
+  findAll(query: PhongBanQueryDto): Promise<PhongBanListResponseDto> {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 10;
+    const search = query.search?.trim().toLowerCase();
+
+    const filteredDepartments = search
+      ? this.departments.filter(
+          (department) =>
+            department.maPhongBan.toLowerCase().includes(search) ||
+            department.tenPhongBan.toLowerCase().includes(search),
+        )
+      : [...this.departments];
+
+    const offset = (page - 1) * limit;
+    const items = filteredDepartments.slice(offset, offset + limit);
+    const total = filteredDepartments.length;
+
+    return Promise.resolve({
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    });
+  }
+
+  findById(id: number): Promise<PhongBanDto> {
+    const department = this.departments.find((item) => item.id === id);
+
+    if (!department) {
+      throw new NotFoundException('Không tìm thấy phòng ban');
+    }
+
+    return Promise.resolve(department);
+  }
+
+  create(payload: CreatePhongBanDto): Promise<PhongBanDto> {
+    const nextCode = payload.maPhongBan.trim();
+    const nextName = payload.tenPhongBan.trim();
+
+    if (!nextCode) {
+      throw new ConflictException('Mã phòng ban không được để trống');
+    }
+
+    if (this.departments.some((item) => item.maPhongBan === nextCode)) {
+      throw new ConflictException('Mã phòng ban đã tồn tại');
+    }
+
+    const nextDepartment: PhongBanDto = {
+      id: Math.max(...this.departments.map((item) => item.id)) + 1,
+      maPhongBan: nextCode,
+      tenPhongBan: nextName,
+      ghiChu: payload.ghiChu?.trim() || null,
+    };
+
+    this.departments.push(nextDepartment);
+    return Promise.resolve(nextDepartment);
+  }
+
+  update(id: number, payload: UpdatePhongBanDto): Promise<PhongBanDto> {
+    const department = this.departments.find((item) => item.id === id);
+
+    if (!department) {
+      throw new NotFoundException('Không tìm thấy phòng ban');
+    }
+
+    const nextCode = payload.maPhongBan.trim();
+    const nextName = payload.tenPhongBan.trim();
+
+    if (!nextCode) {
+      throw new ConflictException('Mã phòng ban không được để trống');
+    }
+
+    if (
+      this.departments.some(
+        (item) => item.id !== id && item.maPhongBan === nextCode,
+      )
+    ) {
+      throw new ConflictException('Mã phòng ban đã tồn tại');
+    }
+
+    department.maPhongBan = nextCode;
+    department.tenPhongBan = nextName;
+    department.ghiChu = payload.ghiChu?.trim() || null;
+
+    return Promise.resolve(department);
+  }
+
+  remove(id: number): Promise<{ message: string }> {
+    const departmentIndex = this.departments.findIndex(
+      (item) => item.id === id,
+    );
+
+    if (departmentIndex < 0) {
+      throw new NotFoundException('Không tìm thấy phòng ban');
+    }
+
+    if (this.linkedDepartmentIds.has(id)) {
+      throw new ConflictException(
+        'Không thể xóa phòng ban đang có nhân viên hoặc thiết bị liên kết',
+      );
+    }
+
+    this.departments.splice(departmentIndex, 1);
+
+    return Promise.resolve({
+      message: 'Xóa phòng ban thành công',
+    });
+  }
+}
+
 describe('AppController (e2e)', () => {
   let app: INestApplication;
   let usersRepository: InMemoryUsersRepository;
+  let phongBanService: InMemoryPhongBanService;
 
   beforeEach(async () => {
     process.env.JWT_SECRET = 'test-secret';
@@ -61,12 +190,27 @@ describe('AppController (e2e)', () => {
         passwordHash: await bcrypt.hash('old-password', 4),
       },
     ]);
+    phongBanService = new InMemoryPhongBanService([
+      {
+        id: 1,
+        maPhongBan: 'PB-KT',
+        tenPhongBan: 'Phòng Kế toán',
+        ghiChu: 'Theo dõi tài chính',
+      },
+      {
+        id: 2,
+        maPhongBan: 'PB-HC',
+        tenPhongBan: 'Phòng Hành chính',
+        ghiChu: null,
+      },
+    ]);
 
     const moduleBuilder = Test.createTestingModule({
       imports: [AppModule],
     });
 
     moduleBuilder.overrideProvider(USER_REPOSITORY).useValue(usersRepository);
+    moduleBuilder.overrideProvider(PhongBanService).useValue(phongBanService);
     moduleBuilder.overrideProvider(SupabaseService).useValue({
       ping: jest.fn().mockResolvedValue(true),
       getClient: jest.fn(),
@@ -167,6 +311,145 @@ describe('AppController (e2e)', () => {
       .expect(200);
   });
 
+  it('lists departments with pagination and search', async () => {
+    const accessToken = await login(app);
+
+    await request(getHttpServer(app))
+      .get(`/${API_PREFIX}/phong-ban?page=1&limit=10&search=kế`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200)
+      .expect((response) => {
+        const body = response.body as WrappedResponse<PhongBanListResponseDto>;
+
+        expect(body.success).toBe(true);
+        expect(body.data.items).toEqual([
+          {
+            id: 1,
+            maPhongBan: 'PB-KT',
+            tenPhongBan: 'Phòng Kế toán',
+            ghiChu: 'Theo dõi tài chính',
+          },
+        ]);
+        expect(body.data.total).toBe(1);
+      });
+  });
+
+  it('returns department detail by id', async () => {
+    const accessToken = await login(app);
+
+    await request(getHttpServer(app))
+      .get(`/${API_PREFIX}/phong-ban/1`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200)
+      .expect((response) => {
+        const body = response.body as WrappedResponse<PhongBanDto>;
+
+        expect(body.success).toBe(true);
+        expect(body.data).toEqual({
+          id: 1,
+          maPhongBan: 'PB-KT',
+          tenPhongBan: 'Phòng Kế toán',
+          ghiChu: 'Theo dõi tài chính',
+        });
+      });
+  });
+
+  it('creates and updates a department', async () => {
+    const accessToken = await login(app);
+
+    const createResponse = await request(getHttpServer(app))
+      .post(`/${API_PREFIX}/phong-ban`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        maPhongBan: 'PB-IT',
+        tenPhongBan: 'Phòng Công nghệ thông tin',
+        ghiChu: 'Quản trị hạ tầng',
+      })
+      .expect(201);
+
+    const createdBody = createResponse.body as WrappedResponse<PhongBanDto>;
+    expect(createdBody.data).toEqual({
+      id: 3,
+      maPhongBan: 'PB-IT',
+      tenPhongBan: 'Phòng Công nghệ thông tin',
+      ghiChu: 'Quản trị hạ tầng',
+    });
+
+    await request(getHttpServer(app))
+      .put(`/${API_PREFIX}/phong-ban/3`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        maPhongBan: 'PB-CNTT',
+        tenPhongBan: 'Phòng CNTT',
+        ghiChu: 'Hạ tầng và hỗ trợ',
+      })
+      .expect(200)
+      .expect((response) => {
+        const body = response.body as WrappedResponse<PhongBanDto>;
+
+        expect(body.data).toEqual({
+          id: 3,
+          maPhongBan: 'PB-CNTT',
+          tenPhongBan: 'Phòng CNTT',
+          ghiChu: 'Hạ tầng và hỗ trợ',
+        });
+      });
+  });
+
+  it('rejects duplicate department code', async () => {
+    const accessToken = await login(app);
+
+    await request(getHttpServer(app))
+      .post(`/${API_PREFIX}/phong-ban`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        maPhongBan: 'PB-KT',
+        tenPhongBan: 'Phòng tài chính',
+        ghiChu: null,
+      })
+      .expect(409)
+      .expect((response) => {
+        const body = response.body as WrappedErrorResponse;
+
+        expect(body.success).toBe(false);
+        expect(body.message).toContain('Mã phòng ban đã tồn tại');
+      });
+  });
+
+  it('refuses to delete a linked department', async () => {
+    const accessToken = await login(app);
+
+    await request(getHttpServer(app))
+      .delete(`/${API_PREFIX}/phong-ban/2`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(409)
+      .expect((response) => {
+        const body = response.body as WrappedErrorResponse;
+
+        expect(body.success).toBe(false);
+        expect(body.message).toContain(
+          'Không thể xóa phòng ban đang có nhân viên hoặc thiết bị liên kết',
+        );
+      });
+  });
+
+  it('deletes an unlinked department', async () => {
+    const accessToken = await login(app);
+
+    await request(getHttpServer(app))
+      .delete(`/${API_PREFIX}/phong-ban/1`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200)
+      .expect((response) => {
+        const body = response.body as WrappedResponse<{ message: string }>;
+
+        expect(body.success).toBe(true);
+        expect(body.data).toEqual({
+          message: 'Xóa phòng ban thành công',
+        });
+      });
+  });
+
   it('serves Scalar docs and OpenAPI JSON under /v1', async () => {
     await request(getHttpServer(app))
       .get(OPENAPI_JSON_PATH)
@@ -174,11 +457,25 @@ describe('AppController (e2e)', () => {
       .expect((response) => {
         const openApi = response.body as {
           openapi: string;
-          paths: Record<string, unknown>;
+          paths: Record<
+            string,
+            {
+              get?: {
+                parameters?: Array<{ name: string }>;
+              };
+            }
+          >;
         };
 
         expect(openApi.openapi).toEqual(expect.any(String));
         expect(openApi.paths[`/${API_PREFIX}/auth/login`]).toBeDefined();
+        expect(openApi.paths[`/${API_PREFIX}/phong-ban`]).toBeDefined();
+        expect(openApi.paths[`/${API_PREFIX}/phong-ban/{id}`]).toBeDefined();
+        expect(
+          openApi.paths[`/${API_PREFIX}/phong-ban`].get?.parameters?.map(
+            (parameter) => parameter.name,
+          ),
+        ).toEqual(expect.arrayContaining(['page', 'limit', 'search']));
       });
 
     await request(getHttpServer(app))
@@ -216,4 +513,11 @@ interface WrappedResponse<T> {
   success: boolean;
   data: T;
   message: string;
+}
+
+interface WrappedErrorResponse {
+  success: boolean;
+  data: null;
+  message: string;
+  statusCode: number;
 }
