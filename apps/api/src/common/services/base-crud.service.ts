@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
 import {
   BadRequestException,
   ConflictException,
@@ -154,14 +155,22 @@ export abstract class BaseCrudService<T = any> {
     const code = error.code ?? '';
 
     // Lỗi trùng giá trị duy nhất (unique constraint)
-    if (code === '23505' || msg.includes('duplicate') || msg.includes('unique')) {
+    if (
+      code === '23505' ||
+      msg.includes('duplicate') ||
+      msg.includes('unique')
+    ) {
       throw new ConflictException(
         `Không thể ${action}: dữ liệu bị trùng (mã hoặc tên đã tồn tại)`,
       );
     }
 
     // Lỗi vi phạm khóa ngoại (foreign key constraint)
-    if (code === '23503' || msg.includes('foreign key') || msg.includes('violates foreign key')) {
+    if (
+      code === '23503' ||
+      msg.includes('foreign key') ||
+      msg.includes('violates foreign key')
+    ) {
       throw new ConflictException(
         `Không thể ${action}: bản ghi đang được sử dụng ở bảng khác`,
       );

@@ -4,19 +4,33 @@ import { AppService } from './app.service';
 
 describe('AppController', () => {
   let appController: AppController;
+  const appService = {
+    getStatus: jest.fn(() => ({
+      message: 'API QLTBCNTT đang hoạt động',
+      timestamp: '2026-04-13T00:00:00.000Z',
+    })),
+  };
 
   beforeEach(async () => {
     const app: TestingModule = await Test.createTestingModule({
       controllers: [AppController],
-      providers: [AppService],
+      providers: [
+        {
+          provide: AppService,
+          useValue: appService,
+        },
+      ],
     }).compile();
 
     appController = app.get<AppController>(AppController);
   });
 
   describe('root', () => {
-    it('should return "Hello World!"', () => {
-      expect(appController.getHello()).toBe('Hello World!');
+    it('should return API status', () => {
+      expect(appController.getStatus()).toEqual({
+        message: 'API QLTBCNTT đang hoạt động',
+        timestamp: '2026-04-13T00:00:00.000Z',
+      });
     });
   });
 });

@@ -5,4 +5,3 @@ export type {
   PaginationQuery,
   PaginatedResult,
 } from './services/base-crud.service';
-

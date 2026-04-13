@@ -22,8 +22,8 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
       if (typeof exceptionResponse === 'string') {
         message = exceptionResponse;
-      } else if (typeof exceptionResponse === 'object') {
-        const res = exceptionResponse as Record<string, any>;
+      } else if (typeof exceptionResponse === 'object' && exceptionResponse) {
+        const res = exceptionResponse as { message?: string | string[] };
         // ValidationPipe trả mảng message khi có nhiều lỗi
         if (Array.isArray(res.message)) {
           message = res.message.join('; ');

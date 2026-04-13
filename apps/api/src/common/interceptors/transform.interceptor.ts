@@ -9,20 +9,21 @@ import { map } from 'rxjs/operators';
 
 export interface ApiResponse<T> {
   success: boolean;
-  data: T;
+  data: T | null;
   message: string;
 }
 
 @Injectable()
-export class TransformInterceptor<T>
-  implements NestInterceptor<T, ApiResponse<T>>
-{
+export class TransformInterceptor<T> implements NestInterceptor<
+  T,
+  ApiResponse<T>
+> {
   intercept(
     context: ExecutionContext,
     next: CallHandler,
   ): Observable<ApiResponse<T>> {
     return next.handle().pipe(
-      map((data) => ({
+      map((data: T | null | undefined) => ({
         success: true,
         data: data ?? null,
         message: 'Thành công',
