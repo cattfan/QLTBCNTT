@@ -8,10 +8,14 @@ import * as bcrypt from 'bcrypt';
 import type {
   CreatePhongBanDto,
   CreateHangModelDto,
+  CreateHeDieuHanhDto,
   CreateLoaiThietBiDto,
   HangModelDto,
   HangModelListResponseDto,
   HangModelQueryDto,
+  HeDieuHanhDto,
+  HeDieuHanhListResponseDto,
+  HeDieuHanhQueryDto,
   LoaiThietBiDto,
   LoaiThietBiListResponseDto,
   LoaiThietBiQueryDto,
@@ -20,6 +24,7 @@ import type {
   PhongBanListResponseDto,
   PhongBanQueryDto,
   UpdateHangModelDto,
+  UpdateHeDieuHanhDto,
   UpdateLoaiThietBiDto,
   UpdatePhongBanDto,
 } from '@repo/shared';
@@ -37,6 +42,7 @@ import type {
   UsersRepository,
 } from './../src/auth/users.repository';
 import { SupabaseService } from './../src/database';
+import { HeDieuHanhService } from './../src/he-dieu-hanh/he-dieu-hanh.service';
 import { HangModelService } from './../src/hang-model/hang-model.service';
 import { LoaiThietBiService } from './../src/loai-thiet-bi/loai-thiet-bi.service';
 import { PhongBanService } from './../src/phong-ban/phong-ban.service';
@@ -392,8 +398,107 @@ class InMemoryHangModelService {
   }
 }
 
+class InMemoryHeDieuHanhService {
+  private readonly linkedOperatingSystemIds = new Set<number>([2]);
+
+  constructor(private readonly operatingSystems: HeDieuHanhDto[]) {}
+
+  findAll(query: HeDieuHanhQueryDto): Promise<HeDieuHanhListResponseDto> {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 10;
+    const search = query.search?.trim().toLowerCase();
+
+    const filteredItems = search
+      ? this.operatingSystems.filter((item) =>
+          item.tenHeDieuHanh.toLowerCase().includes(search),
+        )
+      : [...this.operatingSystems];
+
+    const offset = (page - 1) * limit;
+    const items = filteredItems.slice(offset, offset + limit);
+    const total = filteredItems.length;
+
+    return Promise.resolve({
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    });
+  }
+
+  findById(id: number): Promise<HeDieuHanhDto> {
+    const item = this.operatingSystems.find((current) => current.id === id);
+
+    if (!item) {
+      throw new NotFoundException('Khong tim thay he dieu hanh');
+    }
+
+    return Promise.resolve(item);
+  }
+
+  create(payload: CreateHeDieuHanhDto): Promise<HeDieuHanhDto> {
+    const tenHeDieuHanh = payload.tenHeDieuHanh.trim();
+
+    if (!tenHeDieuHanh) {
+      throw new ConflictException('Ten he dieu hanh khong duoc de trong');
+    }
+
+    const nextItem: HeDieuHanhDto = {
+      id: Math.max(...this.operatingSystems.map((current) => current.id)) + 1,
+      tenHeDieuHanh,
+      phienBan: payload.phienBan?.trim() || null,
+    };
+
+    this.operatingSystems.push(nextItem);
+    return Promise.resolve(nextItem);
+  }
+
+  update(id: number, payload: UpdateHeDieuHanhDto): Promise<HeDieuHanhDto> {
+    const item = this.operatingSystems.find((current) => current.id === id);
+
+    if (!item) {
+      throw new NotFoundException('Khong tim thay he dieu hanh');
+    }
+
+    const tenHeDieuHanh = payload.tenHeDieuHanh.trim();
+
+    if (!tenHeDieuHanh) {
+      throw new ConflictException('Ten he dieu hanh khong duoc de trong');
+    }
+
+    item.tenHeDieuHanh = tenHeDieuHanh;
+    item.phienBan = payload.phienBan?.trim() || null;
+
+    return Promise.resolve(item);
+  }
+
+  remove(id: number): Promise<{ message: string }> {
+    const index = this.operatingSystems.findIndex(
+      (current) => current.id === id,
+    );
+
+    if (index < 0) {
+      throw new NotFoundException('Khong tim thay he dieu hanh');
+    }
+
+    if (this.linkedOperatingSystemIds.has(id)) {
+      throw new ConflictException(
+        'Khong the xoa he dieu hanh dang co thiet bi lien ket',
+      );
+    }
+
+    this.operatingSystems.splice(index, 1);
+
+    return Promise.resolve({
+      message: 'Xoa he dieu hanh thanh cong',
+    });
+  }
+}
+
 describe('AppController (e2e)', () => {
   let app: INestApplication;
+  let heDieuHanhService: InMemoryHeDieuHanhService;
   let hangModelService: InMemoryHangModelService;
   let usersRepository: InMemoryUsersRepository;
   let phongBanService: InMemoryPhongBanService;
@@ -456,11 +561,26 @@ describe('AppController (e2e)', () => {
         ghiChu: null,
       },
     ]);
+    heDieuHanhService = new InMemoryHeDieuHanhService([
+      {
+        id: 1,
+        tenHeDieuHanh: 'Windows',
+        phienBan: '11 Pro',
+      },
+      {
+        id: 2,
+        tenHeDieuHanh: 'Ubuntu',
+        phienBan: '24.04 LTS',
+      },
+    ]);
 
     const moduleBuilder = Test.createTestingModule({
       imports: [AppModule],
     });
 
+    moduleBuilder
+      .overrideProvider(HeDieuHanhService)
+      .useValue(heDieuHanhService);
     moduleBuilder.overrideProvider(HangModelService).useValue(hangModelService);
     moduleBuilder
       .overrideProvider(LoaiThietBiService)
@@ -965,6 +1085,120 @@ describe('AppController (e2e)', () => {
       });
   });
 
+  it('lists operating systems with pagination and name search', async () => {
+    const accessToken = await login(app);
+
+    await request(getHttpServer(app))
+      .get(`/${API_PREFIX}/he-dieu-hanh?page=1&limit=10&search=windows`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200)
+      .expect((response) => {
+        const body =
+          response.body as WrappedResponse<HeDieuHanhListResponseDto>;
+
+        expect(body.success).toBe(true);
+        expect(body.data.items).toEqual([
+          {
+            id: 1,
+            tenHeDieuHanh: 'Windows',
+            phienBan: '11 Pro',
+          },
+        ]);
+        expect(body.data.total).toBe(1);
+      });
+  });
+
+  it('returns operating-system detail by id', async () => {
+    const accessToken = await login(app);
+
+    await request(getHttpServer(app))
+      .get(`/${API_PREFIX}/he-dieu-hanh/1`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200)
+      .expect((response) => {
+        const body = response.body as WrappedResponse<HeDieuHanhDto>;
+
+        expect(body.success).toBe(true);
+        expect(body.data).toEqual({
+          id: 1,
+          tenHeDieuHanh: 'Windows',
+          phienBan: '11 Pro',
+        });
+      });
+  });
+
+  it('creates and updates an operating system', async () => {
+    const accessToken = await login(app);
+
+    const createResponse = await request(getHttpServer(app))
+      .post(`/${API_PREFIX}/he-dieu-hanh`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        tenHeDieuHanh: 'macOS',
+        phienBan: 'Sonoma',
+      })
+      .expect(201);
+
+    const createdBody = createResponse.body as WrappedResponse<HeDieuHanhDto>;
+    expect(createdBody.data).toEqual({
+      id: 3,
+      tenHeDieuHanh: 'macOS',
+      phienBan: 'Sonoma',
+    });
+
+    await request(getHttpServer(app))
+      .put(`/${API_PREFIX}/he-dieu-hanh/3`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        tenHeDieuHanh: 'macOS',
+        phienBan: 'Sequoia',
+      })
+      .expect(200)
+      .expect((response) => {
+        const body = response.body as WrappedResponse<HeDieuHanhDto>;
+
+        expect(body.data).toEqual({
+          id: 3,
+          tenHeDieuHanh: 'macOS',
+          phienBan: 'Sequoia',
+        });
+      });
+  });
+
+  it('refuses to delete a linked operating system', async () => {
+    const accessToken = await login(app);
+
+    await request(getHttpServer(app))
+      .delete(`/${API_PREFIX}/he-dieu-hanh/2`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(409)
+      .expect((response) => {
+        const body = response.body as WrappedErrorResponse;
+
+        expect(body.success).toBe(false);
+        expect(body.message).toContain(
+          'Khong the xoa he dieu hanh dang co thiet bi lien ket',
+        );
+      });
+  });
+
+  it('deletes an unlinked operating system', async () => {
+    const accessToken = await login(app);
+
+    await request(getHttpServer(app))
+      .delete(`/${API_PREFIX}/he-dieu-hanh/1`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200)
+      .expect((response) => {
+        const body = response.body as WrappedResponse<{ message: string }>;
+
+        expect(body.success).toBe(true);
+        expect(body.data).toEqual({
+          message: 'Xoa he dieu hanh thanh cong',
+        });
+      });
+  });
+
   it('serves Scalar docs and OpenAPI JSON under /v1', async () => {
     await request(getHttpServer(app))
       .get(OPENAPI_JSON_PATH)
@@ -984,6 +1218,8 @@ describe('AppController (e2e)', () => {
 
         expect(openApi.openapi).toEqual(expect.any(String));
         expect(openApi.paths[`/${API_PREFIX}/auth/login`]).toBeDefined();
+        expect(openApi.paths[`/${API_PREFIX}/he-dieu-hanh`]).toBeDefined();
+        expect(openApi.paths[`/${API_PREFIX}/he-dieu-hanh/{id}`]).toBeDefined();
         expect(openApi.paths[`/${API_PREFIX}/hang-model`]).toBeDefined();
         expect(openApi.paths[`/${API_PREFIX}/hang-model/{id}`]).toBeDefined();
         expect(openApi.paths[`/${API_PREFIX}/loai-thiet-bi`]).toBeDefined();
@@ -992,6 +1228,11 @@ describe('AppController (e2e)', () => {
         ).toBeDefined();
         expect(openApi.paths[`/${API_PREFIX}/phong-ban`]).toBeDefined();
         expect(openApi.paths[`/${API_PREFIX}/phong-ban/{id}`]).toBeDefined();
+        expect(
+          openApi.paths[`/${API_PREFIX}/he-dieu-hanh`].get?.parameters?.map(
+            (parameter) => parameter.name,
+          ),
+        ).toEqual(expect.arrayContaining(['page', 'limit', 'search']));
         expect(
           openApi.paths[`/${API_PREFIX}/hang-model`].get?.parameters?.map(
             (parameter) => parameter.name,
