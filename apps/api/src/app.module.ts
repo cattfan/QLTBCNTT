@@ -4,6 +4,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { DatabaseModule } from './database';
+import { HangModelModule } from './hang-model/hang-model.module';
 import { LoaiThietBiModule } from './loai-thiet-bi/loai-thiet-bi.module';
 import { PhongBanModule } from './phong-ban/phong-ban.module';
 
@@ -15,6 +16,7 @@ import { PhongBanModule } from './phong-ban/phong-ban.module';
     }),
     DatabaseModule,
     AuthModule,
+    HangModelModule,
     LoaiThietBiModule,
     PhongBanModule,
   ],

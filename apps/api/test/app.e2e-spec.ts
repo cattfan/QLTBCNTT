@@ -7,7 +7,11 @@ import { Test, TestingModule } from '@nestjs/testing';
 import * as bcrypt from 'bcrypt';
 import type {
   CreatePhongBanDto,
+  CreateHangModelDto,
   CreateLoaiThietBiDto,
+  HangModelDto,
+  HangModelListResponseDto,
+  HangModelQueryDto,
   LoaiThietBiDto,
   LoaiThietBiListResponseDto,
   LoaiThietBiQueryDto,
@@ -15,6 +19,7 @@ import type {
   PhongBanDto,
   PhongBanListResponseDto,
   PhongBanQueryDto,
+  UpdateHangModelDto,
   UpdateLoaiThietBiDto,
   UpdatePhongBanDto,
 } from '@repo/shared';
@@ -32,6 +37,7 @@ import type {
   UsersRepository,
 } from './../src/auth/users.repository';
 import { SupabaseService } from './../src/database';
+import { HangModelService } from './../src/hang-model/hang-model.service';
 import { LoaiThietBiService } from './../src/loai-thiet-bi/loai-thiet-bi.service';
 import { PhongBanService } from './../src/phong-ban/phong-ban.service';
 
@@ -286,8 +292,109 @@ class InMemoryLoaiThietBiService {
   }
 }
 
+class InMemoryHangModelService {
+  private readonly linkedHangModelIds = new Set<number>([2]);
+
+  constructor(private readonly hangModels: HangModelDto[]) {}
+
+  list(query: HangModelQueryDto): Promise<HangModelListResponseDto> {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 10;
+    const search = query.search?.trim().toLowerCase();
+
+    const filteredItems = search
+      ? this.hangModels.filter(
+          (item) =>
+            item.tenHang.toLowerCase().includes(search) ||
+            item.tenModel?.toLowerCase().includes(search),
+        )
+      : [...this.hangModels];
+
+    const offset = (page - 1) * limit;
+    const items = filteredItems.slice(offset, offset + limit);
+    const total = filteredItems.length;
+
+    return Promise.resolve({
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    });
+  }
+
+  getById(id: number): Promise<HangModelDto> {
+    const item = this.hangModels.find((current) => current.id === id);
+
+    if (!item) {
+      throw new NotFoundException('Không tìm thấy hãng/model');
+    }
+
+    return Promise.resolve(item);
+  }
+
+  createItem(payload: CreateHangModelDto): Promise<HangModelDto> {
+    const tenHang = payload.tenHang.trim();
+
+    if (!tenHang) {
+      throw new ConflictException('Tên hãng không được để trống');
+    }
+
+    const nextItem: HangModelDto = {
+      id: Math.max(...this.hangModels.map((current) => current.id)) + 1,
+      tenHang,
+      tenModel: payload.tenModel?.trim() || null,
+      ghiChu: payload.ghiChu?.trim() || null,
+    };
+
+    this.hangModels.push(nextItem);
+    return Promise.resolve(nextItem);
+  }
+
+  updateItem(id: number, payload: UpdateHangModelDto): Promise<HangModelDto> {
+    const item = this.hangModels.find((current) => current.id === id);
+
+    if (!item) {
+      throw new NotFoundException('Không tìm thấy hãng/model');
+    }
+
+    const tenHang = payload.tenHang.trim();
+
+    if (!tenHang) {
+      throw new ConflictException('Tên hãng không được để trống');
+    }
+
+    item.tenHang = tenHang;
+    item.tenModel = payload.tenModel?.trim() || null;
+    item.ghiChu = payload.ghiChu?.trim() || null;
+
+    return Promise.resolve(item);
+  }
+
+  removeItem(id: number): Promise<{ message: string }> {
+    const index = this.hangModels.findIndex((current) => current.id === id);
+
+    if (index < 0) {
+      throw new NotFoundException('Không tìm thấy hãng/model');
+    }
+
+    if (this.linkedHangModelIds.has(id)) {
+      throw new ConflictException(
+        'Không thể xóa hãng/model đang có thiết bị liên kết',
+      );
+    }
+
+    this.hangModels.splice(index, 1);
+
+    return Promise.resolve({
+      message: 'Xóa hãng/model thành công',
+    });
+  }
+}
+
 describe('AppController (e2e)', () => {
   let app: INestApplication;
+  let hangModelService: InMemoryHangModelService;
   let usersRepository: InMemoryUsersRepository;
   let phongBanService: InMemoryPhongBanService;
   let loaiThietBiService: InMemoryLoaiThietBiService;
@@ -335,11 +442,26 @@ describe('AppController (e2e)', () => {
         ghiChu: null,
       },
     ]);
+    hangModelService = new InMemoryHangModelService([
+      {
+        id: 1,
+        tenHang: 'Dell',
+        tenModel: 'Latitude 7420',
+        ghiChu: 'Dòng laptop doanh nghiệp',
+      },
+      {
+        id: 2,
+        tenHang: 'HP',
+        tenModel: 'LaserJet Pro',
+        ghiChu: null,
+      },
+    ]);
 
     const moduleBuilder = Test.createTestingModule({
       imports: [AppModule],
     });
 
+    moduleBuilder.overrideProvider(HangModelService).useValue(hangModelService);
     moduleBuilder
       .overrideProvider(LoaiThietBiService)
       .useValue(loaiThietBiService);
@@ -724,6 +846,125 @@ describe('AppController (e2e)', () => {
       });
   });
 
+  it('lists hang-model items with pagination and search', async () => {
+    const accessToken = await login(app);
+
+    await request(getHttpServer(app))
+      .get(`/${API_PREFIX}/hang-model?page=1&limit=10&search=dell`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200)
+      .expect((response) => {
+        const body = response.body as WrappedResponse<HangModelListResponseDto>;
+
+        expect(body.success).toBe(true);
+        expect(body.data.items).toEqual([
+          {
+            id: 1,
+            tenHang: 'Dell',
+            tenModel: 'Latitude 7420',
+            ghiChu: 'Dòng laptop doanh nghiệp',
+          },
+        ]);
+        expect(body.data.total).toBe(1);
+      });
+  });
+
+  it('returns hang-model detail by id', async () => {
+    const accessToken = await login(app);
+
+    await request(getHttpServer(app))
+      .get(`/${API_PREFIX}/hang-model/1`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200)
+      .expect((response) => {
+        const body = response.body as WrappedResponse<HangModelDto>;
+
+        expect(body.success).toBe(true);
+        expect(body.data).toEqual({
+          id: 1,
+          tenHang: 'Dell',
+          tenModel: 'Latitude 7420',
+          ghiChu: 'Dòng laptop doanh nghiệp',
+        });
+      });
+  });
+
+  it('creates and updates a hang-model item', async () => {
+    const accessToken = await login(app);
+
+    const createResponse = await request(getHttpServer(app))
+      .post(`/${API_PREFIX}/hang-model`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        tenHang: 'Lenovo',
+        tenModel: 'ThinkPad X1',
+        ghiChu: 'Dòng ultrabook doanh nghiệp',
+      })
+      .expect(201);
+
+    const createdBody = createResponse.body as WrappedResponse<HangModelDto>;
+    expect(createdBody.data).toEqual({
+      id: 3,
+      tenHang: 'Lenovo',
+      tenModel: 'ThinkPad X1',
+      ghiChu: 'Dòng ultrabook doanh nghiệp',
+    });
+
+    await request(getHttpServer(app))
+      .put(`/${API_PREFIX}/hang-model/3`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        tenHang: 'Lenovo',
+        tenModel: 'ThinkPad X1 Carbon',
+        ghiChu: 'Bản nâng cấp',
+      })
+      .expect(200)
+      .expect((response) => {
+        const body = response.body as WrappedResponse<HangModelDto>;
+
+        expect(body.data).toEqual({
+          id: 3,
+          tenHang: 'Lenovo',
+          tenModel: 'ThinkPad X1 Carbon',
+          ghiChu: 'Bản nâng cấp',
+        });
+      });
+  });
+
+  it('refuses to delete a linked hang-model item', async () => {
+    const accessToken = await login(app);
+
+    await request(getHttpServer(app))
+      .delete(`/${API_PREFIX}/hang-model/2`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(409)
+      .expect((response) => {
+        const body = response.body as WrappedErrorResponse;
+
+        expect(body.success).toBe(false);
+        expect(body.message).toContain(
+          'Không thể xóa hãng/model đang có thiết bị liên kết',
+        );
+      });
+  });
+
+  it('deletes an unlinked hang-model item', async () => {
+    const accessToken = await login(app);
+
+    await request(getHttpServer(app))
+      .delete(`/${API_PREFIX}/hang-model/1`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200)
+      .expect((response) => {
+        const body = response.body as WrappedResponse<{ message: string }>;
+
+        expect(body.success).toBe(true);
+        expect(body.data).toEqual({
+          message: 'Xóa hãng/model thành công',
+        });
+      });
+  });
+
   it('serves Scalar docs and OpenAPI JSON under /v1', async () => {
     await request(getHttpServer(app))
       .get(OPENAPI_JSON_PATH)
@@ -743,12 +984,19 @@ describe('AppController (e2e)', () => {
 
         expect(openApi.openapi).toEqual(expect.any(String));
         expect(openApi.paths[`/${API_PREFIX}/auth/login`]).toBeDefined();
+        expect(openApi.paths[`/${API_PREFIX}/hang-model`]).toBeDefined();
+        expect(openApi.paths[`/${API_PREFIX}/hang-model/{id}`]).toBeDefined();
         expect(openApi.paths[`/${API_PREFIX}/loai-thiet-bi`]).toBeDefined();
         expect(
           openApi.paths[`/${API_PREFIX}/loai-thiet-bi/{id}`],
         ).toBeDefined();
         expect(openApi.paths[`/${API_PREFIX}/phong-ban`]).toBeDefined();
         expect(openApi.paths[`/${API_PREFIX}/phong-ban/{id}`]).toBeDefined();
+        expect(
+          openApi.paths[`/${API_PREFIX}/hang-model`].get?.parameters?.map(
+            (parameter) => parameter.name,
+          ),
+        ).toEqual(expect.arrayContaining(['page', 'limit', 'search']));
         expect(
           openApi.paths[`/${API_PREFIX}/loai-thiet-bi`].get?.parameters?.map(
             (parameter) => parameter.name,
