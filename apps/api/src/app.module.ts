@@ -4,6 +4,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { DatabaseModule } from './database';
+import { LoaiThietBiModule } from './loai-thiet-bi/loai-thiet-bi.module';
 import { PhongBanModule } from './phong-ban/phong-ban.module';
 
 @Module({
@@ -14,6 +15,7 @@ import { PhongBanModule } from './phong-ban/phong-ban.module';
     }),
     DatabaseModule,
     AuthModule,
+    LoaiThietBiModule,
     PhongBanModule,
   ],
   controllers: [AppController],

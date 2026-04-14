@@ -7,10 +7,15 @@ import { Test, TestingModule } from '@nestjs/testing';
 import * as bcrypt from 'bcrypt';
 import type {
   CreatePhongBanDto,
+  CreateLoaiThietBiDto,
+  LoaiThietBiDto,
+  LoaiThietBiListResponseDto,
+  LoaiThietBiQueryDto,
   LoginResponseDto,
   PhongBanDto,
   PhongBanListResponseDto,
   PhongBanQueryDto,
+  UpdateLoaiThietBiDto,
   UpdatePhongBanDto,
 } from '@repo/shared';
 import request from 'supertest';
@@ -27,6 +32,7 @@ import type {
   UsersRepository,
 } from './../src/auth/users.repository';
 import { SupabaseService } from './../src/database';
+import { LoaiThietBiService } from './../src/loai-thiet-bi/loai-thiet-bi.service';
 import { PhongBanService } from './../src/phong-ban/phong-ban.service';
 
 class InMemoryUsersRepository implements UsersRepository {
@@ -170,10 +176,121 @@ class InMemoryPhongBanService {
   }
 }
 
+class InMemoryLoaiThietBiService {
+  private readonly linkedCategoryIds = new Set<number>([2]);
+
+  constructor(private readonly categories: LoaiThietBiDto[]) {}
+
+  findAll(query: LoaiThietBiQueryDto): Promise<LoaiThietBiListResponseDto> {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 10;
+    const search = query.search?.trim().toLowerCase();
+
+    const filteredCategories = search
+      ? this.categories.filter((category) =>
+          category.tenLoai.toLowerCase().includes(search),
+        )
+      : [...this.categories];
+
+    const offset = (page - 1) * limit;
+    const items = filteredCategories.slice(offset, offset + limit);
+    const total = filteredCategories.length;
+
+    return Promise.resolve({
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    });
+  }
+
+  findById(id: number): Promise<LoaiThietBiDto> {
+    const category = this.categories.find((item) => item.id === id);
+
+    if (!category) {
+      throw new NotFoundException('Không tìm thấy loại thiết bị');
+    }
+
+    return Promise.resolve(category);
+  }
+
+  create(payload: CreateLoaiThietBiDto): Promise<LoaiThietBiDto> {
+    const nextCode = payload.maLoai.trim();
+    const nextName = payload.tenLoai.trim();
+
+    if (!nextCode) {
+      throw new ConflictException('Mã danh mục không được để trống');
+    }
+
+    if (this.categories.some((item) => item.maLoai === nextCode)) {
+      throw new ConflictException('Mã danh mục đã tồn tại');
+    }
+
+    const nextCategory: LoaiThietBiDto = {
+      id: Math.max(...this.categories.map((item) => item.id)) + 1,
+      maLoai: nextCode,
+      tenLoai: nextName,
+      ghiChu: payload.ghiChu?.trim() || null,
+    };
+
+    this.categories.push(nextCategory);
+    return Promise.resolve(nextCategory);
+  }
+
+  update(id: number, payload: UpdateLoaiThietBiDto): Promise<LoaiThietBiDto> {
+    const category = this.categories.find((item) => item.id === id);
+
+    if (!category) {
+      throw new NotFoundException('Không tìm thấy loại thiết bị');
+    }
+
+    const nextCode = payload.maLoai.trim();
+    const nextName = payload.tenLoai.trim();
+
+    if (!nextCode) {
+      throw new ConflictException('Mã danh mục không được để trống');
+    }
+
+    if (
+      this.categories.some((item) => item.id !== id && item.maLoai === nextCode)
+    ) {
+      throw new ConflictException('Mã danh mục đã tồn tại');
+    }
+
+    category.maLoai = nextCode;
+    category.tenLoai = nextName;
+    category.ghiChu = payload.ghiChu?.trim() || null;
+
+    return Promise.resolve(category);
+  }
+
+  remove(id: number): Promise<{ message: string }> {
+    const categoryIndex = this.categories.findIndex((item) => item.id === id);
+
+    if (categoryIndex < 0) {
+      throw new NotFoundException('Không tìm thấy loại thiết bị');
+    }
+
+    if (this.linkedCategoryIds.has(id)) {
+      throw new ConflictException(
+        'Không thể xóa loại thiết bị đang có thiết bị liên kết',
+      );
+    }
+
+    this.categories.splice(categoryIndex, 1);
+
+    return Promise.resolve({
+      message: 'Xóa loại thiết bị thành công',
+    });
+  }
+}
+
 describe('AppController (e2e)', () => {
   let app: INestApplication;
   let usersRepository: InMemoryUsersRepository;
   let phongBanService: InMemoryPhongBanService;
+  let loaiThietBiService: InMemoryLoaiThietBiService;
 
   beforeEach(async () => {
     process.env.JWT_SECRET = 'test-secret';
@@ -204,11 +321,28 @@ describe('AppController (e2e)', () => {
         ghiChu: null,
       },
     ]);
+    loaiThietBiService = new InMemoryLoaiThietBiService([
+      {
+        id: 1,
+        maLoai: 'LT-LAPTOP',
+        tenLoai: 'Laptop',
+        ghiChu: 'Thiết bị máy tính xách tay',
+      },
+      {
+        id: 2,
+        maLoai: 'LT-PRINTER',
+        tenLoai: 'Máy in',
+        ghiChu: null,
+      },
+    ]);
 
     const moduleBuilder = Test.createTestingModule({
       imports: [AppModule],
     });
 
+    moduleBuilder
+      .overrideProvider(LoaiThietBiService)
+      .useValue(loaiThietBiService);
     moduleBuilder.overrideProvider(USER_REPOSITORY).useValue(usersRepository);
     moduleBuilder.overrideProvider(PhongBanService).useValue(phongBanService);
     moduleBuilder.overrideProvider(SupabaseService).useValue({
@@ -450,6 +584,146 @@ describe('AppController (e2e)', () => {
       });
   });
 
+  it('lists device types with pagination and search', async () => {
+    const accessToken = await login(app);
+
+    await request(getHttpServer(app))
+      .get(`/${API_PREFIX}/loai-thiet-bi?page=1&limit=10&search=laptop`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200)
+      .expect((response) => {
+        const body =
+          response.body as WrappedResponse<LoaiThietBiListResponseDto>;
+
+        expect(body.success).toBe(true);
+        expect(body.data.items).toEqual([
+          {
+            id: 1,
+            maLoai: 'LT-LAPTOP',
+            tenLoai: 'Laptop',
+            ghiChu: 'Thiết bị máy tính xách tay',
+          },
+        ]);
+        expect(body.data.total).toBe(1);
+      });
+  });
+
+  it('returns device type detail by id', async () => {
+    const accessToken = await login(app);
+
+    await request(getHttpServer(app))
+      .get(`/${API_PREFIX}/loai-thiet-bi/1`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200)
+      .expect((response) => {
+        const body = response.body as WrappedResponse<LoaiThietBiDto>;
+
+        expect(body.success).toBe(true);
+        expect(body.data).toEqual({
+          id: 1,
+          maLoai: 'LT-LAPTOP',
+          tenLoai: 'Laptop',
+          ghiChu: 'Thiết bị máy tính xách tay',
+        });
+      });
+  });
+
+  it('creates and updates a device type', async () => {
+    const accessToken = await login(app);
+
+    const createResponse = await request(getHttpServer(app))
+      .post(`/${API_PREFIX}/loai-thiet-bi`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        maLoai: 'LT-DESKTOP',
+        tenLoai: 'Máy bàn',
+        ghiChu: 'Thiết bị máy tính để bàn',
+      })
+      .expect(201);
+
+    const createdBody = createResponse.body as WrappedResponse<LoaiThietBiDto>;
+    expect(createdBody.data).toEqual({
+      id: 3,
+      maLoai: 'LT-DESKTOP',
+      tenLoai: 'Máy bàn',
+      ghiChu: 'Thiết bị máy tính để bàn',
+    });
+
+    await request(getHttpServer(app))
+      .put(`/${API_PREFIX}/loai-thiet-bi/3`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        maLoai: 'LT-PC',
+        tenLoai: 'Máy tính để bàn',
+        ghiChu: 'Thiết bị văn phòng',
+      })
+      .expect(200)
+      .expect((response) => {
+        const body = response.body as WrappedResponse<LoaiThietBiDto>;
+
+        expect(body.data).toEqual({
+          id: 3,
+          maLoai: 'LT-PC',
+          tenLoai: 'Máy tính để bàn',
+          ghiChu: 'Thiết bị văn phòng',
+        });
+      });
+  });
+
+  it('rejects duplicate device-type code', async () => {
+    const accessToken = await login(app);
+
+    await request(getHttpServer(app))
+      .post(`/${API_PREFIX}/loai-thiet-bi`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        maLoai: 'LT-LAPTOP',
+        tenLoai: 'Laptop mới',
+        ghiChu: null,
+      })
+      .expect(409)
+      .expect((response) => {
+        const body = response.body as WrappedErrorResponse;
+
+        expect(body.success).toBe(false);
+        expect(body.message).toContain('Mã danh mục đã tồn tại');
+      });
+  });
+
+  it('refuses to delete a linked device type', async () => {
+    const accessToken = await login(app);
+
+    await request(getHttpServer(app))
+      .delete(`/${API_PREFIX}/loai-thiet-bi/2`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(409)
+      .expect((response) => {
+        const body = response.body as WrappedErrorResponse;
+
+        expect(body.success).toBe(false);
+        expect(body.message).toContain(
+          'Không thể xóa loại thiết bị đang có thiết bị liên kết',
+        );
+      });
+  });
+
+  it('deletes an unlinked device type', async () => {
+    const accessToken = await login(app);
+
+    await request(getHttpServer(app))
+      .delete(`/${API_PREFIX}/loai-thiet-bi/1`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200)
+      .expect((response) => {
+        const body = response.body as WrappedResponse<{ message: string }>;
+
+        expect(body.success).toBe(true);
+        expect(body.data).toEqual({
+          message: 'Xóa loại thiết bị thành công',
+        });
+      });
+  });
+
   it('serves Scalar docs and OpenAPI JSON under /v1', async () => {
     await request(getHttpServer(app))
       .get(OPENAPI_JSON_PATH)
@@ -469,8 +743,17 @@ describe('AppController (e2e)', () => {
 
         expect(openApi.openapi).toEqual(expect.any(String));
         expect(openApi.paths[`/${API_PREFIX}/auth/login`]).toBeDefined();
+        expect(openApi.paths[`/${API_PREFIX}/loai-thiet-bi`]).toBeDefined();
+        expect(
+          openApi.paths[`/${API_PREFIX}/loai-thiet-bi/{id}`],
+        ).toBeDefined();
         expect(openApi.paths[`/${API_PREFIX}/phong-ban`]).toBeDefined();
         expect(openApi.paths[`/${API_PREFIX}/phong-ban/{id}`]).toBeDefined();
+        expect(
+          openApi.paths[`/${API_PREFIX}/loai-thiet-bi`].get?.parameters?.map(
+            (parameter) => parameter.name,
+          ),
+        ).toEqual(expect.arrayContaining(['page', 'limit', 'search']));
         expect(
           openApi.paths[`/${API_PREFIX}/phong-ban`].get?.parameters?.map(
             (parameter) => parameter.name,
