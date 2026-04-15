@@ -10,6 +10,7 @@ import type {
   CreateHangModelDto,
   CreateHeDieuHanhDto,
   CreateLoaiThietBiDto,
+  CreateNguonGocTaiSanDto,
   CreatePhanMemDietVirusDto,
   CreateTinhTrangThietBiDto,
   HangModelDto,
@@ -22,6 +23,9 @@ import type {
   LoaiThietBiListResponseDto,
   LoaiThietBiQueryDto,
   LoginResponseDto,
+  NguonGocTaiSanDto,
+  NguonGocTaiSanListResponseDto,
+  NguonGocTaiSanQueryDto,
   PhanMemDietVirusDto,
   PhanMemDietVirusListResponseDto,
   PhanMemDietVirusQueryDto,
@@ -34,6 +38,7 @@ import type {
   UpdateHangModelDto,
   UpdateHeDieuHanhDto,
   UpdateLoaiThietBiDto,
+  UpdateNguonGocTaiSanDto,
   UpdatePhanMemDietVirusDto,
   UpdatePhongBanDto,
   UpdateTinhTrangThietBiDto,
@@ -55,6 +60,7 @@ import { SupabaseService } from './../src/database';
 import { HeDieuHanhService } from './../src/he-dieu-hanh/he-dieu-hanh.service';
 import { HangModelService } from './../src/hang-model/hang-model.service';
 import { LoaiThietBiService } from './../src/loai-thiet-bi/loai-thiet-bi.service';
+import { NguonGocTaiSanService } from './../src/nguon-goc-tai-san/nguon-goc-tai-san.service';
 import { PhanMemDietVirusService } from './../src/phan-mem-diet-virus/phan-mem-diet-virus.service';
 import { PhongBanService } from './../src/phong-ban/phong-ban.service';
 import { TinhTrangThietBiService } from './../src/tinh-trang-thiet-bi/tinh-trang-thiet-bi.service';
@@ -720,10 +726,114 @@ class InMemoryTinhTrangThietBiService {
   }
 }
 
+class InMemoryNguonGocTaiSanService {
+  private readonly linkedAssetOriginIds = new Set<number>([2]);
+
+  constructor(private readonly assetOrigins: NguonGocTaiSanDto[]) {}
+
+  list(query: NguonGocTaiSanQueryDto): Promise<NguonGocTaiSanListResponseDto> {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 10;
+    const search = query.search?.trim().toLowerCase();
+
+    const filteredItems = search
+      ? this.assetOrigins.filter(
+          (item) =>
+            item.maNguonGoc?.toLowerCase().includes(search) ||
+            item.tenNguonGoc.toLowerCase().includes(search),
+        )
+      : [...this.assetOrigins];
+
+    const offset = (page - 1) * limit;
+    const items = filteredItems.slice(offset, offset + limit);
+    const total = filteredItems.length;
+
+    return Promise.resolve({
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    });
+  }
+
+  getById(id: number): Promise<NguonGocTaiSanDto> {
+    const item = this.assetOrigins.find((current) => current.id === id);
+
+    if (!item) {
+      throw new NotFoundException('Khong tim thay nguon goc tai san');
+    }
+
+    return Promise.resolve(item);
+  }
+
+  createItem(payload: CreateNguonGocTaiSanDto): Promise<NguonGocTaiSanDto> {
+    const tenNguonGoc = payload.tenNguonGoc.trim();
+
+    if (!tenNguonGoc) {
+      throw new ConflictException('Ten nguon goc tai san khong duoc de trong');
+    }
+
+    const nextItem: NguonGocTaiSanDto = {
+      id: Math.max(...this.assetOrigins.map((current) => current.id)) + 1,
+      maNguonGoc: payload.maNguonGoc?.trim() || null,
+      tenNguonGoc,
+      ghiChu: payload.ghiChu?.trim() || null,
+    };
+
+    this.assetOrigins.push(nextItem);
+    return Promise.resolve(nextItem);
+  }
+
+  updateItem(
+    id: number,
+    payload: UpdateNguonGocTaiSanDto,
+  ): Promise<NguonGocTaiSanDto> {
+    const item = this.assetOrigins.find((current) => current.id === id);
+
+    if (!item) {
+      throw new NotFoundException('Khong tim thay nguon goc tai san');
+    }
+
+    const tenNguonGoc = payload.tenNguonGoc.trim();
+
+    if (!tenNguonGoc) {
+      throw new ConflictException('Ten nguon goc tai san khong duoc de trong');
+    }
+
+    item.maNguonGoc = payload.maNguonGoc?.trim() || null;
+    item.tenNguonGoc = tenNguonGoc;
+    item.ghiChu = payload.ghiChu?.trim() || null;
+
+    return Promise.resolve(item);
+  }
+
+  removeItem(id: number): Promise<{ message: string }> {
+    const index = this.assetOrigins.findIndex((current) => current.id === id);
+
+    if (index < 0) {
+      throw new NotFoundException('Khong tim thay nguon goc tai san');
+    }
+
+    if (this.linkedAssetOriginIds.has(id)) {
+      throw new ConflictException(
+        'Khong the xoa nguon goc tai san dang co thiet bi lien ket',
+      );
+    }
+
+    this.assetOrigins.splice(index, 1);
+
+    return Promise.resolve({
+      message: 'Xoa nguon goc tai san thanh cong',
+    });
+  }
+}
+
 describe('AppController (e2e)', () => {
   let app: INestApplication;
   let heDieuHanhService: InMemoryHeDieuHanhService;
   let hangModelService: InMemoryHangModelService;
+  let nguonGocTaiSanService: InMemoryNguonGocTaiSanService;
   let phanMemDietVirusService: InMemoryPhanMemDietVirusService;
   let tinhTrangThietBiService: InMemoryTinhTrangThietBiService;
   let usersRepository: InMemoryUsersRepository;
@@ -811,6 +921,20 @@ describe('AppController (e2e)', () => {
         phienBan: null,
       },
     ]);
+    nguonGocTaiSanService = new InMemoryNguonGocTaiSanService([
+      {
+        id: 1,
+        maNguonGoc: 'NSNN',
+        tenNguonGoc: 'Ngân sách nhà nước',
+        ghiChu: 'Nguồn kinh phí cấp phát',
+      },
+      {
+        id: 2,
+        maNguonGoc: 'THUE',
+        tenNguonGoc: 'Thuê ngoài',
+        ghiChu: null,
+      },
+    ]);
     tinhTrangThietBiService = new InMemoryTinhTrangThietBiService([
       {
         id: 1,
@@ -846,6 +970,9 @@ describe('AppController (e2e)', () => {
     moduleBuilder
       .overrideProvider(PhanMemDietVirusService)
       .useValue(phanMemDietVirusService);
+    moduleBuilder
+      .overrideProvider(NguonGocTaiSanService)
+      .useValue(nguonGocTaiSanService);
     moduleBuilder
       .overrideProvider(TinhTrangThietBiService)
       .useValue(tinhTrangThietBiService);
@@ -1701,6 +1828,127 @@ describe('AppController (e2e)', () => {
       });
   });
 
+  it('lists asset origins with pagination and search', async () => {
+    const accessToken = await login(app);
+
+    await request(getHttpServer(app))
+      .get(`/${API_PREFIX}/nguon-goc-tai-san?page=1&limit=10&search=Ngân`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200)
+      .expect((response) => {
+        const body =
+          response.body as WrappedResponse<NguonGocTaiSanListResponseDto>;
+
+        expect(body.success).toBe(true);
+        expect(body.data.items).toEqual([
+          {
+            id: 1,
+            maNguonGoc: 'NSNN',
+            tenNguonGoc: 'Ngân sách nhà nước',
+            ghiChu: 'Nguồn kinh phí cấp phát',
+          },
+        ]);
+        expect(body.data.total).toBe(1);
+      });
+  });
+
+  it('returns asset-origin detail by id', async () => {
+    const accessToken = await login(app);
+
+    await request(getHttpServer(app))
+      .get(`/${API_PREFIX}/nguon-goc-tai-san/1`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200)
+      .expect((response) => {
+        const body = response.body as WrappedResponse<NguonGocTaiSanDto>;
+
+        expect(body.success).toBe(true);
+        expect(body.data).toEqual({
+          id: 1,
+          maNguonGoc: 'NSNN',
+          tenNguonGoc: 'Ngân sách nhà nước',
+          ghiChu: 'Nguồn kinh phí cấp phát',
+        });
+      });
+  });
+
+  it('creates and updates an asset origin', async () => {
+    const accessToken = await login(app);
+
+    const createResponse = await request(getHttpServer(app))
+      .post(`/${API_PREFIX}/nguon-goc-tai-san`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        maNguonGoc: 'VIEN_TRO',
+        tenNguonGoc: 'Viện trợ',
+        ghiChu: 'Nguồn tài trợ bên ngoài',
+      })
+      .expect(201);
+
+    const createdBody =
+      createResponse.body as WrappedResponse<NguonGocTaiSanDto>;
+    expect(createdBody.data).toEqual({
+      id: 3,
+      maNguonGoc: 'VIEN_TRO',
+      tenNguonGoc: 'Viện trợ',
+      ghiChu: 'Nguồn tài trợ bên ngoài',
+    });
+
+    await request(getHttpServer(app))
+      .put(`/${API_PREFIX}/nguon-goc-tai-san/3`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        maNguonGoc: 'VIEN_TRO',
+        tenNguonGoc: 'Viện trợ quốc tế',
+        ghiChu: 'Nguồn hợp tác quốc tế',
+      })
+      .expect(200)
+      .expect((response) => {
+        const body = response.body as WrappedResponse<NguonGocTaiSanDto>;
+
+        expect(body.data).toEqual({
+          id: 3,
+          maNguonGoc: 'VIEN_TRO',
+          tenNguonGoc: 'Viện trợ quốc tế',
+          ghiChu: 'Nguồn hợp tác quốc tế',
+        });
+      });
+  });
+
+  it('refuses to delete a linked asset origin', async () => {
+    const accessToken = await login(app);
+
+    await request(getHttpServer(app))
+      .delete(`/${API_PREFIX}/nguon-goc-tai-san/2`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(409)
+      .expect((response) => {
+        const body = response.body as WrappedErrorResponse;
+
+        expect(body.success).toBe(false);
+        expect(body.message).toContain(
+          'Khong the xoa nguon goc tai san dang co thiet bi lien ket',
+        );
+      });
+  });
+
+  it('deletes an unlinked asset origin', async () => {
+    const accessToken = await login(app);
+
+    await request(getHttpServer(app))
+      .delete(`/${API_PREFIX}/nguon-goc-tai-san/1`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200)
+      .expect((response) => {
+        const body = response.body as WrappedResponse<{ message: string }>;
+
+        expect(body.success).toBe(true);
+        expect(body.data).toEqual({
+          message: 'Xoa nguon goc tai san thanh cong',
+        });
+      });
+  });
+
   it('serves Scalar docs and OpenAPI JSON under /v1', async () => {
     await request(getHttpServer(app))
       .get(OPENAPI_JSON_PATH)
@@ -1726,6 +1974,10 @@ describe('AppController (e2e)', () => {
         expect(
           openApi.paths[`/${API_PREFIX}/phan-mem-diet-virus/{id}`],
         ).toBeDefined();
+        expect(openApi.paths[`/${API_PREFIX}/nguon-goc-tai-san`]).toBeDefined();
+        expect(
+          openApi.paths[`/${API_PREFIX}/nguon-goc-tai-san/{id}`],
+        ).toBeDefined();
         expect(
           openApi.paths[`/${API_PREFIX}/tinh-trang-thiet-bi`],
         ).toBeDefined();
@@ -1745,6 +1997,11 @@ describe('AppController (e2e)', () => {
         expect(
           openApi.paths[
             `/${API_PREFIX}/phan-mem-diet-virus`
+          ].get?.parameters?.map((parameter) => parameter.name),
+        ).toEqual(expect.arrayContaining(['page', 'limit', 'search']));
+        expect(
+          openApi.paths[
+            `/${API_PREFIX}/nguon-goc-tai-san`
           ].get?.parameters?.map((parameter) => parameter.name),
         ).toEqual(expect.arrayContaining(['page', 'limit', 'search']));
         expect(
