@@ -11,6 +11,7 @@ import type {
   CreateHeDieuHanhDto,
   CreateLoaiThietBiDto,
   CreatePhanMemDietVirusDto,
+  CreateTinhTrangThietBiDto,
   HangModelDto,
   HangModelListResponseDto,
   HangModelQueryDto,
@@ -27,11 +28,15 @@ import type {
   PhongBanDto,
   PhongBanListResponseDto,
   PhongBanQueryDto,
+  TinhTrangThietBiDto,
+  TinhTrangThietBiListResponseDto,
+  TinhTrangThietBiQueryDto,
   UpdateHangModelDto,
   UpdateHeDieuHanhDto,
   UpdateLoaiThietBiDto,
   UpdatePhanMemDietVirusDto,
   UpdatePhongBanDto,
+  UpdateTinhTrangThietBiDto,
 } from '@repo/shared';
 import request from 'supertest';
 import { AppModule } from './../src/app.module';
@@ -52,6 +57,7 @@ import { HangModelService } from './../src/hang-model/hang-model.service';
 import { LoaiThietBiService } from './../src/loai-thiet-bi/loai-thiet-bi.service';
 import { PhanMemDietVirusService } from './../src/phan-mem-diet-virus/phan-mem-diet-virus.service';
 import { PhongBanService } from './../src/phong-ban/phong-ban.service';
+import { TinhTrangThietBiService } from './../src/tinh-trang-thiet-bi/tinh-trang-thiet-bi.service';
 
 class InMemoryUsersRepository implements UsersRepository {
   constructor(private readonly users: UserRecord[]) {}
@@ -607,11 +613,119 @@ class InMemoryPhanMemDietVirusService {
   }
 }
 
+class InMemoryTinhTrangThietBiService {
+  private readonly linkedStatusIds = new Set<number>([2]);
+
+  constructor(private readonly statuses: TinhTrangThietBiDto[]) {}
+
+  list(
+    query: TinhTrangThietBiQueryDto,
+  ): Promise<TinhTrangThietBiListResponseDto> {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 10;
+    const search = query.search?.trim().toLowerCase();
+
+    const filteredItems = search
+      ? this.statuses.filter((item) =>
+          item.tenTinhTrang.toLowerCase().includes(search),
+        )
+      : [...this.statuses];
+
+    const offset = (page - 1) * limit;
+    const items = filteredItems.slice(offset, offset + limit);
+    const total = filteredItems.length;
+
+    return Promise.resolve({
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    });
+  }
+
+  getById(id: number): Promise<TinhTrangThietBiDto> {
+    const item = this.statuses.find((current) => current.id === id);
+
+    if (!item) {
+      throw new NotFoundException('Khong tim thay tinh trang thiet bi');
+    }
+
+    return Promise.resolve(item);
+  }
+
+  createItem(payload: CreateTinhTrangThietBiDto): Promise<TinhTrangThietBiDto> {
+    const tenTinhTrang = payload.tenTinhTrang.trim();
+
+    if (!tenTinhTrang) {
+      throw new ConflictException(
+        'Ten tinh trang thiet bi khong duoc de trong',
+      );
+    }
+
+    const nextItem: TinhTrangThietBiDto = {
+      id: Math.max(...this.statuses.map((current) => current.id)) + 1,
+      maTinhTrang: payload.maTinhTrang?.trim() || null,
+      tenTinhTrang,
+      ghiChu: payload.ghiChu?.trim() || null,
+    };
+
+    this.statuses.push(nextItem);
+    return Promise.resolve(nextItem);
+  }
+
+  updateItem(
+    id: number,
+    payload: UpdateTinhTrangThietBiDto,
+  ): Promise<TinhTrangThietBiDto> {
+    const item = this.statuses.find((current) => current.id === id);
+
+    if (!item) {
+      throw new NotFoundException('Khong tim thay tinh trang thiet bi');
+    }
+
+    const tenTinhTrang = payload.tenTinhTrang.trim();
+
+    if (!tenTinhTrang) {
+      throw new ConflictException(
+        'Ten tinh trang thiet bi khong duoc de trong',
+      );
+    }
+
+    item.maTinhTrang = payload.maTinhTrang?.trim() || null;
+    item.tenTinhTrang = tenTinhTrang;
+    item.ghiChu = payload.ghiChu?.trim() || null;
+
+    return Promise.resolve(item);
+  }
+
+  removeItem(id: number): Promise<{ message: string }> {
+    const index = this.statuses.findIndex((current) => current.id === id);
+
+    if (index < 0) {
+      throw new NotFoundException('Khong tim thay tinh trang thiet bi');
+    }
+
+    if (this.linkedStatusIds.has(id)) {
+      throw new ConflictException(
+        'Khong the xoa tinh trang thiet bi dang co thiet bi lien ket',
+      );
+    }
+
+    this.statuses.splice(index, 1);
+
+    return Promise.resolve({
+      message: 'Xoa tinh trang thiet bi thanh cong',
+    });
+  }
+}
+
 describe('AppController (e2e)', () => {
   let app: INestApplication;
   let heDieuHanhService: InMemoryHeDieuHanhService;
   let hangModelService: InMemoryHangModelService;
   let phanMemDietVirusService: InMemoryPhanMemDietVirusService;
+  let tinhTrangThietBiService: InMemoryTinhTrangThietBiService;
   let usersRepository: InMemoryUsersRepository;
   let phongBanService: InMemoryPhongBanService;
   let loaiThietBiService: InMemoryLoaiThietBiService;
@@ -697,6 +811,26 @@ describe('AppController (e2e)', () => {
         phienBan: null,
       },
     ]);
+    tinhTrangThietBiService = new InMemoryTinhTrangThietBiService([
+      {
+        id: 1,
+        maTinhTrang: 'DANG_SU_DUNG',
+        tenTinhTrang: 'Đang sử dụng',
+        ghiChu: null,
+      },
+      {
+        id: 2,
+        maTinhTrang: 'LUU_KHO',
+        tenTinhTrang: 'Lưu kho',
+        ghiChu: null,
+      },
+      {
+        id: 3,
+        maTinhTrang: 'THANH_LY',
+        tenTinhTrang: 'Thanh lý',
+        ghiChu: null,
+      },
+    ]);
 
     const moduleBuilder = Test.createTestingModule({
       imports: [AppModule],
@@ -712,6 +846,9 @@ describe('AppController (e2e)', () => {
     moduleBuilder
       .overrideProvider(PhanMemDietVirusService)
       .useValue(phanMemDietVirusService);
+    moduleBuilder
+      .overrideProvider(TinhTrangThietBiService)
+      .useValue(tinhTrangThietBiService);
     moduleBuilder.overrideProvider(USER_REPOSITORY).useValue(usersRepository);
     moduleBuilder.overrideProvider(PhongBanService).useValue(phongBanService);
     moduleBuilder.overrideProvider(SupabaseService).useValue({
@@ -1443,6 +1580,127 @@ describe('AppController (e2e)', () => {
       });
   });
 
+  it('lists device statuses with default values and search', async () => {
+    const accessToken = await login(app);
+
+    await request(getHttpServer(app))
+      .get(`/${API_PREFIX}/tinh-trang-thiet-bi?page=1&limit=10&search=Đang`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200)
+      .expect((response) => {
+        const body =
+          response.body as WrappedResponse<TinhTrangThietBiListResponseDto>;
+
+        expect(body.success).toBe(true);
+        expect(body.data.items).toEqual([
+          {
+            id: 1,
+            maTinhTrang: 'DANG_SU_DUNG',
+            tenTinhTrang: 'Đang sử dụng',
+            ghiChu: null,
+          },
+        ]);
+        expect(body.data.total).toBe(1);
+      });
+  });
+
+  it('returns device-status detail by id', async () => {
+    const accessToken = await login(app);
+
+    await request(getHttpServer(app))
+      .get(`/${API_PREFIX}/tinh-trang-thiet-bi/1`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200)
+      .expect((response) => {
+        const body = response.body as WrappedResponse<TinhTrangThietBiDto>;
+
+        expect(body.success).toBe(true);
+        expect(body.data).toEqual({
+          id: 1,
+          maTinhTrang: 'DANG_SU_DUNG',
+          tenTinhTrang: 'Đang sử dụng',
+          ghiChu: null,
+        });
+      });
+  });
+
+  it('creates and updates a device status', async () => {
+    const accessToken = await login(app);
+
+    const createResponse = await request(getHttpServer(app))
+      .post(`/${API_PREFIX}/tinh-trang-thiet-bi`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        maTinhTrang: 'BAO_TRI',
+        tenTinhTrang: 'Bảo trì',
+        ghiChu: 'Thiết bị đang bảo trì',
+      })
+      .expect(201);
+
+    const createdBody =
+      createResponse.body as WrappedResponse<TinhTrangThietBiDto>;
+    expect(createdBody.data).toEqual({
+      id: 4,
+      maTinhTrang: 'BAO_TRI',
+      tenTinhTrang: 'Bảo trì',
+      ghiChu: 'Thiết bị đang bảo trì',
+    });
+
+    await request(getHttpServer(app))
+      .put(`/${API_PREFIX}/tinh-trang-thiet-bi/4`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        maTinhTrang: 'BAO_TRI',
+        tenTinhTrang: 'Bảo trì định kỳ',
+        ghiChu: 'Thiết bị bảo trì theo kế hoạch',
+      })
+      .expect(200)
+      .expect((response) => {
+        const body = response.body as WrappedResponse<TinhTrangThietBiDto>;
+
+        expect(body.data).toEqual({
+          id: 4,
+          maTinhTrang: 'BAO_TRI',
+          tenTinhTrang: 'Bảo trì định kỳ',
+          ghiChu: 'Thiết bị bảo trì theo kế hoạch',
+        });
+      });
+  });
+
+  it('refuses to delete a linked device status', async () => {
+    const accessToken = await login(app);
+
+    await request(getHttpServer(app))
+      .delete(`/${API_PREFIX}/tinh-trang-thiet-bi/2`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(409)
+      .expect((response) => {
+        const body = response.body as WrappedErrorResponse;
+
+        expect(body.success).toBe(false);
+        expect(body.message).toContain(
+          'Khong the xoa tinh trang thiet bi dang co thiet bi lien ket',
+        );
+      });
+  });
+
+  it('deletes an unlinked device status', async () => {
+    const accessToken = await login(app);
+
+    await request(getHttpServer(app))
+      .delete(`/${API_PREFIX}/tinh-trang-thiet-bi/1`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200)
+      .expect((response) => {
+        const body = response.body as WrappedResponse<{ message: string }>;
+
+        expect(body.success).toBe(true);
+        expect(body.data).toEqual({
+          message: 'Xoa tinh trang thiet bi thanh cong',
+        });
+      });
+  });
+
   it('serves Scalar docs and OpenAPI JSON under /v1', async () => {
     await request(getHttpServer(app))
       .get(OPENAPI_JSON_PATH)
@@ -1468,6 +1726,12 @@ describe('AppController (e2e)', () => {
         expect(
           openApi.paths[`/${API_PREFIX}/phan-mem-diet-virus/{id}`],
         ).toBeDefined();
+        expect(
+          openApi.paths[`/${API_PREFIX}/tinh-trang-thiet-bi`],
+        ).toBeDefined();
+        expect(
+          openApi.paths[`/${API_PREFIX}/tinh-trang-thiet-bi/{id}`],
+        ).toBeDefined();
         expect(openApi.paths[`/${API_PREFIX}/he-dieu-hanh`]).toBeDefined();
         expect(openApi.paths[`/${API_PREFIX}/he-dieu-hanh/{id}`]).toBeDefined();
         expect(openApi.paths[`/${API_PREFIX}/hang-model`]).toBeDefined();
@@ -1481,6 +1745,11 @@ describe('AppController (e2e)', () => {
         expect(
           openApi.paths[
             `/${API_PREFIX}/phan-mem-diet-virus`
+          ].get?.parameters?.map((parameter) => parameter.name),
+        ).toEqual(expect.arrayContaining(['page', 'limit', 'search']));
+        expect(
+          openApi.paths[
+            `/${API_PREFIX}/tinh-trang-thiet-bi`
           ].get?.parameters?.map((parameter) => parameter.name),
         ).toEqual(expect.arrayContaining(['page', 'limit', 'search']));
         expect(

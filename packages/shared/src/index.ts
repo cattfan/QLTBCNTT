@@ -6,3 +6,4 @@ export * from './dto/he-dieu-hanh.dto';
 export * from './dto/loai-thiet-bi.dto';
 export * from './dto/phan-mem-diet-virus.dto';
 export * from './dto/phong-ban.dto';
+export * from './dto/tinh-trang-thiet-bi.dto';
