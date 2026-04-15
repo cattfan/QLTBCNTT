@@ -7,6 +7,7 @@ import { DatabaseModule } from './database';
 import { HeDieuHanhModule } from './he-dieu-hanh/he-dieu-hanh.module';
 import { HangModelModule } from './hang-model/hang-model.module';
 import { LoaiThietBiModule } from './loai-thiet-bi/loai-thiet-bi.module';
+import { PhanMemDietVirusModule } from './phan-mem-diet-virus/phan-mem-diet-virus.module';
 import { PhongBanModule } from './phong-ban/phong-ban.module';
 
 @Module({
@@ -20,6 +21,7 @@ import { PhongBanModule } from './phong-ban/phong-ban.module';
     HeDieuHanhModule,
     HangModelModule,
     LoaiThietBiModule,
+    PhanMemDietVirusModule,
     PhongBanModule,
   ],
   controllers: [AppController],

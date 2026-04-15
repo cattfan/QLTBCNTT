@@ -10,6 +10,7 @@ import type {
   CreateHangModelDto,
   CreateHeDieuHanhDto,
   CreateLoaiThietBiDto,
+  CreatePhanMemDietVirusDto,
   HangModelDto,
   HangModelListResponseDto,
   HangModelQueryDto,
@@ -20,12 +21,16 @@ import type {
   LoaiThietBiListResponseDto,
   LoaiThietBiQueryDto,
   LoginResponseDto,
+  PhanMemDietVirusDto,
+  PhanMemDietVirusListResponseDto,
+  PhanMemDietVirusQueryDto,
   PhongBanDto,
   PhongBanListResponseDto,
   PhongBanQueryDto,
   UpdateHangModelDto,
   UpdateHeDieuHanhDto,
   UpdateLoaiThietBiDto,
+  UpdatePhanMemDietVirusDto,
   UpdatePhongBanDto,
 } from '@repo/shared';
 import request from 'supertest';
@@ -45,6 +50,7 @@ import { SupabaseService } from './../src/database';
 import { HeDieuHanhService } from './../src/he-dieu-hanh/he-dieu-hanh.service';
 import { HangModelService } from './../src/hang-model/hang-model.service';
 import { LoaiThietBiService } from './../src/loai-thiet-bi/loai-thiet-bi.service';
+import { PhanMemDietVirusService } from './../src/phan-mem-diet-virus/phan-mem-diet-virus.service';
 import { PhongBanService } from './../src/phong-ban/phong-ban.service';
 
 class InMemoryUsersRepository implements UsersRepository {
@@ -496,10 +502,116 @@ class InMemoryHeDieuHanhService {
   }
 }
 
+class InMemoryPhanMemDietVirusService {
+  private readonly linkedSoftwareIds = new Set<number>([2]);
+
+  constructor(private readonly softwares: PhanMemDietVirusDto[]) {}
+
+  list(
+    query: PhanMemDietVirusQueryDto,
+  ): Promise<PhanMemDietVirusListResponseDto> {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 10;
+    const search = query.search?.trim().toLowerCase();
+
+    const filteredItems = search
+      ? this.softwares.filter((item) =>
+          item.tenPhanMem.toLowerCase().includes(search),
+        )
+      : [...this.softwares];
+
+    const offset = (page - 1) * limit;
+    const items = filteredItems.slice(offset, offset + limit);
+    const total = filteredItems.length;
+
+    return Promise.resolve({
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    });
+  }
+
+  getById(id: number): Promise<PhanMemDietVirusDto> {
+    const item = this.softwares.find((current) => current.id === id);
+
+    if (!item) {
+      throw new NotFoundException('Khong tim thay phan mem diet virus');
+    }
+
+    return Promise.resolve(item);
+  }
+
+  createItem(payload: CreatePhanMemDietVirusDto): Promise<PhanMemDietVirusDto> {
+    const tenPhanMem = payload.tenPhanMem.trim();
+
+    if (!tenPhanMem) {
+      throw new ConflictException(
+        'Ten phan mem diet virus khong duoc de trong',
+      );
+    }
+
+    const nextItem: PhanMemDietVirusDto = {
+      id: Math.max(...this.softwares.map((current) => current.id)) + 1,
+      tenPhanMem,
+      phienBan: payload.phienBan?.trim() || null,
+    };
+
+    this.softwares.push(nextItem);
+    return Promise.resolve(nextItem);
+  }
+
+  updateItem(
+    id: number,
+    payload: UpdatePhanMemDietVirusDto,
+  ): Promise<PhanMemDietVirusDto> {
+    const item = this.softwares.find((current) => current.id === id);
+
+    if (!item) {
+      throw new NotFoundException('Khong tim thay phan mem diet virus');
+    }
+
+    const tenPhanMem = payload.tenPhanMem.trim();
+
+    if (!tenPhanMem) {
+      throw new ConflictException(
+        'Ten phan mem diet virus khong duoc de trong',
+      );
+    }
+
+    item.tenPhanMem = tenPhanMem;
+    item.phienBan = payload.phienBan?.trim() || null;
+
+    return Promise.resolve(item);
+  }
+
+  removeItem(id: number): Promise<{ message: string }> {
+    const index = this.softwares.findIndex((current) => current.id === id);
+
+    if (index < 0) {
+      throw new NotFoundException('Khong tim thay phan mem diet virus');
+    }
+
+    if (this.linkedSoftwareIds.has(id)) {
+      throw new ConflictException(
+        'Khong the xoa phan mem diet virus dang co thiet bi lien ket',
+      );
+    }
+
+    this.softwares.splice(index, 1);
+
+    return Promise.resolve({
+      message: 'Xoa phan mem diet virus thanh cong',
+    });
+  }
+}
+
 describe('AppController (e2e)', () => {
   let app: INestApplication;
   let heDieuHanhService: InMemoryHeDieuHanhService;
   let hangModelService: InMemoryHangModelService;
+  let phanMemDietVirusService: InMemoryPhanMemDietVirusService;
   let usersRepository: InMemoryUsersRepository;
   let phongBanService: InMemoryPhongBanService;
   let loaiThietBiService: InMemoryLoaiThietBiService;
@@ -573,6 +685,18 @@ describe('AppController (e2e)', () => {
         phienBan: '24.04 LTS',
       },
     ]);
+    phanMemDietVirusService = new InMemoryPhanMemDietVirusService([
+      {
+        id: 1,
+        tenPhanMem: 'Kaspersky',
+        phienBan: '2026',
+      },
+      {
+        id: 2,
+        tenPhanMem: 'Windows Defender',
+        phienBan: null,
+      },
+    ]);
 
     const moduleBuilder = Test.createTestingModule({
       imports: [AppModule],
@@ -585,6 +709,9 @@ describe('AppController (e2e)', () => {
     moduleBuilder
       .overrideProvider(LoaiThietBiService)
       .useValue(loaiThietBiService);
+    moduleBuilder
+      .overrideProvider(PhanMemDietVirusService)
+      .useValue(phanMemDietVirusService);
     moduleBuilder.overrideProvider(USER_REPOSITORY).useValue(usersRepository);
     moduleBuilder.overrideProvider(PhongBanService).useValue(phongBanService);
     moduleBuilder.overrideProvider(SupabaseService).useValue({
@@ -1199,6 +1326,123 @@ describe('AppController (e2e)', () => {
       });
   });
 
+  it('lists antivirus software with pagination and name search', async () => {
+    const accessToken = await login(app);
+
+    await request(getHttpServer(app))
+      .get(
+        `/${API_PREFIX}/phan-mem-diet-virus?page=1&limit=10&search=kaspersky`,
+      )
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200)
+      .expect((response) => {
+        const body =
+          response.body as WrappedResponse<PhanMemDietVirusListResponseDto>;
+
+        expect(body.success).toBe(true);
+        expect(body.data.items).toEqual([
+          {
+            id: 1,
+            tenPhanMem: 'Kaspersky',
+            phienBan: '2026',
+          },
+        ]);
+        expect(body.data.total).toBe(1);
+      });
+  });
+
+  it('returns antivirus software detail by id', async () => {
+    const accessToken = await login(app);
+
+    await request(getHttpServer(app))
+      .get(`/${API_PREFIX}/phan-mem-diet-virus/1`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200)
+      .expect((response) => {
+        const body = response.body as WrappedResponse<PhanMemDietVirusDto>;
+
+        expect(body.success).toBe(true);
+        expect(body.data).toEqual({
+          id: 1,
+          tenPhanMem: 'Kaspersky',
+          phienBan: '2026',
+        });
+      });
+  });
+
+  it('creates and updates antivirus software', async () => {
+    const accessToken = await login(app);
+
+    const createResponse = await request(getHttpServer(app))
+      .post(`/${API_PREFIX}/phan-mem-diet-virus`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        tenPhanMem: 'BKAV',
+        phienBan: 'Pro',
+      })
+      .expect(201);
+
+    const createdBody =
+      createResponse.body as WrappedResponse<PhanMemDietVirusDto>;
+    expect(createdBody.data).toEqual({
+      id: 3,
+      tenPhanMem: 'BKAV',
+      phienBan: 'Pro',
+    });
+
+    await request(getHttpServer(app))
+      .put(`/${API_PREFIX}/phan-mem-diet-virus/3`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        tenPhanMem: 'BKAV',
+        phienBan: 'Enterprise',
+      })
+      .expect(200)
+      .expect((response) => {
+        const body = response.body as WrappedResponse<PhanMemDietVirusDto>;
+
+        expect(body.data).toEqual({
+          id: 3,
+          tenPhanMem: 'BKAV',
+          phienBan: 'Enterprise',
+        });
+      });
+  });
+
+  it('refuses to delete linked antivirus software', async () => {
+    const accessToken = await login(app);
+
+    await request(getHttpServer(app))
+      .delete(`/${API_PREFIX}/phan-mem-diet-virus/2`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(409)
+      .expect((response) => {
+        const body = response.body as WrappedErrorResponse;
+
+        expect(body.success).toBe(false);
+        expect(body.message).toContain(
+          'Khong the xoa phan mem diet virus dang co thiet bi lien ket',
+        );
+      });
+  });
+
+  it('deletes unlinked antivirus software', async () => {
+    const accessToken = await login(app);
+
+    await request(getHttpServer(app))
+      .delete(`/${API_PREFIX}/phan-mem-diet-virus/1`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200)
+      .expect((response) => {
+        const body = response.body as WrappedResponse<{ message: string }>;
+
+        expect(body.success).toBe(true);
+        expect(body.data).toEqual({
+          message: 'Xoa phan mem diet virus thanh cong',
+        });
+      });
+  });
+
   it('serves Scalar docs and OpenAPI JSON under /v1', async () => {
     await request(getHttpServer(app))
       .get(OPENAPI_JSON_PATH)
@@ -1218,6 +1462,12 @@ describe('AppController (e2e)', () => {
 
         expect(openApi.openapi).toEqual(expect.any(String));
         expect(openApi.paths[`/${API_PREFIX}/auth/login`]).toBeDefined();
+        expect(
+          openApi.paths[`/${API_PREFIX}/phan-mem-diet-virus`],
+        ).toBeDefined();
+        expect(
+          openApi.paths[`/${API_PREFIX}/phan-mem-diet-virus/{id}`],
+        ).toBeDefined();
         expect(openApi.paths[`/${API_PREFIX}/he-dieu-hanh`]).toBeDefined();
         expect(openApi.paths[`/${API_PREFIX}/he-dieu-hanh/{id}`]).toBeDefined();
         expect(openApi.paths[`/${API_PREFIX}/hang-model`]).toBeDefined();
@@ -1228,6 +1478,11 @@ describe('AppController (e2e)', () => {
         ).toBeDefined();
         expect(openApi.paths[`/${API_PREFIX}/phong-ban`]).toBeDefined();
         expect(openApi.paths[`/${API_PREFIX}/phong-ban/{id}`]).toBeDefined();
+        expect(
+          openApi.paths[
+            `/${API_PREFIX}/phan-mem-diet-virus`
+          ].get?.parameters?.map((parameter) => parameter.name),
+        ).toEqual(expect.arrayContaining(['page', 'limit', 'search']));
         expect(
           openApi.paths[`/${API_PREFIX}/he-dieu-hanh`].get?.parameters?.map(
             (parameter) => parameter.name,
