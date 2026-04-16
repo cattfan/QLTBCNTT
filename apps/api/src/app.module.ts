@@ -8,6 +8,7 @@ import { CauHinhMayTinhModule } from './cau-hinh-may-tinh/cau-hinh-may-tinh.modu
 import { DatabaseModule } from './database';
 import { HeDieuHanhModule } from './he-dieu-hanh/he-dieu-hanh.module';
 import { HangModelModule } from './hang-model/hang-model.module';
+import { LichSuBanGiaoModule } from './lich-su-ban-giao/lich-su-ban-giao.module';
 import { LoaiThietBiModule } from './loai-thiet-bi/loai-thiet-bi.module';
 import { NguonGocTaiSanModule } from './nguon-goc-tai-san/nguon-goc-tai-san.module';
 import { NguoiDungModule } from './nguoi-dung/nguoi-dung.module';
@@ -29,6 +30,7 @@ import { ThuHoiModule } from './thu-hoi/thu-hoi.module';
     AuthModule,
     HeDieuHanhModule,
     HangModelModule,
+    LichSuBanGiaoModule,
     LoaiThietBiModule,
     NguonGocTaiSanModule,
     NguoiDungModule,

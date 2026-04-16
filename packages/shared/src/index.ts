@@ -5,6 +5,7 @@ export * from './dto/cau-hinh-may-tinh.dto';
 export * from './dto/example.dto';
 export * from './dto/hang-model.dto';
 export * from './dto/he-dieu-hanh.dto';
+export * from './dto/lich-su-ban-giao.dto';
 export * from './dto/loai-thiet-bi.dto';
 export * from './dto/nguon-goc-tai-san.dto';
 export * from './dto/nguoi-dung.dto';
