@@ -15,6 +15,7 @@ import { PhanMemDietVirusModule } from './phan-mem-diet-virus/phan-mem-diet-viru
 import { PhongBanModule } from './phong-ban/phong-ban.module';
 import { ThietBiModule } from './thiet-bi/thiet-bi.module';
 import { TinhTrangThietBiModule } from './tinh-trang-thiet-bi/tinh-trang-thiet-bi.module';
+import { ThuHoiModule } from './thu-hoi/thu-hoi.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { TinhTrangThietBiModule } from './tinh-trang-thiet-bi/tinh-trang-thiet-b
     PhongBanModule,
     ThietBiModule,
     TinhTrangThietBiModule,
+    ThuHoiModule,
   ],
   controllers: [AppController],
   providers: [AppService],

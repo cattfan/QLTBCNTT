@@ -12,3 +12,4 @@ export * from './dto/phan-mem-diet-virus.dto';
 export * from './dto/phong-ban.dto';
 export * from './dto/thiet-bi.dto';
 export * from './dto/tinh-trang-thiet-bi.dto';
+export * from './dto/thu-hoi.dto';
