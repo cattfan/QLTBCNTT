@@ -87,9 +87,10 @@ export class ThietBiService extends BaseCrudService<ThietBiRow> {
     }
 
     const total = count ?? 0;
+    const rows = (data ?? []) as ThietBiRow[];
 
     return {
-      items: (data ?? []).map((item) => this.toDto(item)),
+      items: rows.map((item) => this.toDto(item)),
       total,
       page,
       limit,

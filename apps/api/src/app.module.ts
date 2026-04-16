@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
+import { CauHinhMayTinhModule } from './cau-hinh-may-tinh/cau-hinh-may-tinh.module';
 import { DatabaseModule } from './database';
 import { HeDieuHanhModule } from './he-dieu-hanh/he-dieu-hanh.module';
 import { HangModelModule } from './hang-model/hang-model.module';
@@ -20,6 +21,7 @@ import { TinhTrangThietBiModule } from './tinh-trang-thiet-bi/tinh-trang-thiet-b
       isGlobal: true,
       envFilePath: ['apps/api/.env', '.env'],
     }),
+    CauHinhMayTinhModule,
     DatabaseModule,
     AuthModule,
     HeDieuHanhModule,
