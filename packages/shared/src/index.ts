@@ -8,4 +8,5 @@ export * from './dto/nguon-goc-tai-san.dto';
 export * from './dto/nguoi-dung.dto';
 export * from './dto/phan-mem-diet-virus.dto';
 export * from './dto/phong-ban.dto';
+export * from './dto/thiet-bi.dto';
 export * from './dto/tinh-trang-thiet-bi.dto';
