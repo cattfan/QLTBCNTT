@@ -20,6 +20,7 @@ import { ThietBiModule } from './thiet-bi/thiet-bi.module';
 import { ThongKeChiPhiModule } from './thong-ke-chi-phi/thong-ke-chi-phi.module';
 import { TinhTrangThietBiModule } from './tinh-trang-thiet-bi/tinh-trang-thiet-bi.module';
 import { ThuHoiModule } from './thu-hoi/thu-hoi.module';
+import { XuatBaoCaoModule } from './xuat-bao-cao/xuat-bao-cao.module';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { ThuHoiModule } from './thu-hoi/thu-hoi.module';
     ThongKeChiPhiModule,
     TinhTrangThietBiModule,
     ThuHoiModule,
+    XuatBaoCaoModule,
   ],
   controllers: [AppController],
   providers: [AppService],

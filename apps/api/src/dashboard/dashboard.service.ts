@@ -1,5 +1,8 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import type {
+  CostTimeGranularity,
+  CostByTimeQueryDto,
+  CostByTimeResponseDto,
   DashboardDepartmentDistributionDto,
   DashboardOverviewDto,
   DashboardRecentEventDto,
@@ -22,7 +25,7 @@ type DepartmentRow = Pick<Tables<'phong_ban'>, 'id' | 'ten_phong_ban'>;
 type HandoverRow = Tables<'lich_su_ban_giao'>;
 type RepairRow = Pick<
   Tables<'sua_chua_bao_tri'>,
-  'id' | 'thiet_bi_id' | 'ngay_ghi_nhan' | 'mo_ta_loi'
+  'id' | 'thiet_bi_id' | 'ngay_ghi_nhan' | 'mo_ta_loi' | 'chi_phi'
 >;
 type UserRow = Pick<Tables<'nguoi_dung'>, 'id' | 'ten_dang_nhap' | 'ho_ten'>;
 
@@ -164,6 +167,27 @@ export class DashboardService {
     };
   }
 
+  async byTime(query: CostByTimeQueryDto): Promise<CostByTimeResponseDto> {
+    const repairs = await this.loadRepairs();
+    const aggregated = new Map<string, number>();
+
+    for (const repair of repairs) {
+      const period = this.toPeriod(repair.ngay_ghi_nhan, query.granularity);
+      aggregated.set(
+        period,
+        (aggregated.get(period) ?? 0) + (repair.chi_phi ?? 0),
+      );
+    }
+
+    return {
+      granularity: query.granularity,
+      items: Array.from(aggregated.entries()).map(([period, totalCost]) => ({
+        period,
+        totalCost,
+      })),
+    };
+  }
+
   private async loadDevices(): Promise<DeviceRow[]> {
     const { data, error } = await this.client
       .from('thiet_bi')
@@ -237,7 +261,7 @@ export class DashboardService {
   private async loadRepairs(): Promise<RepairRow[]> {
     const { data, error } = await this.client
       .from('sua_chua_bao_tri')
-      .select('id, thiet_bi_id, ngay_ghi_nhan, mo_ta_loi');
+      .select('id, thiet_bi_id, ngay_ghi_nhan, mo_ta_loi, chi_phi');
 
     if (error) {
       throw new InternalServerErrorException(
@@ -251,7 +275,7 @@ export class DashboardService {
   private async loadOpenRepairs(): Promise<RepairRow[]> {
     const { data, error } = await this.client
       .from('sua_chua_bao_tri')
-      .select('id, thiet_bi_id, ngay_ghi_nhan, mo_ta_loi')
+      .select('id, thiet_bi_id, ngay_ghi_nhan, mo_ta_loi, chi_phi')
       .is('ngay_sua_chua', null);
 
     if (error) {
@@ -292,5 +316,24 @@ export class DashboardService {
       .replace(/\p{Diacritic}/gu, '')
       .trim()
       .toLowerCase();
+  }
+
+  private toPeriod(
+    dateValue: string,
+    granularity: CostTimeGranularity,
+  ): string {
+    const date = new Date(dateValue);
+    const year = date.getUTCFullYear();
+    const month = date.getUTCMonth() + 1;
+
+    if (granularity === 'month') {
+      return `${year}-${String(month).padStart(2, '0')}`;
+    }
+
+    if (granularity === 'quarter') {
+      return `${year}-Q${Math.floor((month - 1) / 3) + 1}`;
+    }
+
+    return String(year);
   }
 }

@@ -9,9 +9,9 @@ import {
 } from '@nestjs/swagger';
 import type { CostByTimeResponseDto, CostStatsResponseDto } from '@repo/shared';
 import {
-  CostByTimeQueryRequest,
-  CostByTimeResponseBody,
   CostStatsResponseBody,
+  ThongKeCostByTimeQueryRequest,
+  ThongKeCostByTimeResponseBody,
 } from './thong-ke-chi-phi.docs';
 import { ThongKeChiPhiService } from './thong-ke-chi-phi.service';
 
@@ -54,13 +54,13 @@ export class ThongKeChiPhiController {
     type: String,
     example: 'month',
   })
-  @ApiOkResponse({ type: CostByTimeResponseBody })
+  @ApiOkResponse({ type: ThongKeCostByTimeResponseBody })
   @ApiUnauthorizedResponse({
     description: 'Chua dang nhap hoac token khong hop le',
   })
   @Get('theo-thoi-gian')
   byTime(
-    @Query() query: CostByTimeQueryRequest,
+    @Query() query: ThongKeCostByTimeQueryRequest,
   ): Promise<CostByTimeResponseDto> {
     return this.thongKeChiPhiService.byTime(query);
   }

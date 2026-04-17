@@ -4,7 +4,7 @@ import type { CostTimeGranularity } from '@repo/shared';
 
 const COST_GRANULARITIES: CostTimeGranularity[] = ['month', 'quarter', 'year'];
 
-export class CostByTimeQueryRequest {
+export class ThongKeCostByTimeQueryRequest {
   @ApiProperty({
     example: 'month',
     enum: COST_GRANULARITIES,
@@ -33,7 +33,7 @@ export class CostStatsResponseBody {
   items!: CostStatsItemResponseBody[];
 }
 
-export class CostByTimeItemResponseBody {
+export class ThongKeCostByTimeItemResponseBody {
   @ApiProperty({ example: '2026-04', description: 'Ky thong ke' })
   period!: string;
 
@@ -41,7 +41,7 @@ export class CostByTimeItemResponseBody {
   totalCost!: number;
 }
 
-export class CostByTimeResponseBody {
+export class ThongKeCostByTimeResponseBody {
   @ApiProperty({
     example: 'month',
     enum: COST_GRANULARITIES,
@@ -50,8 +50,8 @@ export class CostByTimeResponseBody {
   granularity!: CostTimeGranularity;
 
   @ApiProperty({
-    type: [CostByTimeItemResponseBody],
+    type: [ThongKeCostByTimeItemResponseBody],
     description: 'Danh sach thong ke theo thoi gian',
   })
-  items!: CostByTimeItemResponseBody[];
+  items!: ThongKeCostByTimeItemResponseBody[];
 }

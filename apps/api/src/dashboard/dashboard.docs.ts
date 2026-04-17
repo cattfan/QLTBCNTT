@@ -1,5 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
-import type { DashboardRecentEventType } from '@repo/shared';
+import type {
+  CostTimeGranularity,
+  DashboardRecentEventType,
+} from '@repo/shared';
+import { IsIn } from 'class-validator';
 
 export class DashboardOverviewResponseBody {
   @ApiProperty({ example: 120 })
@@ -63,4 +67,35 @@ export class DashboardRecentEventResponseBody {
 export class DashboardRecentEventsResponseBody {
   @ApiProperty({ type: [DashboardRecentEventResponseBody] })
   items!: DashboardRecentEventResponseBody[];
+}
+
+const COST_GRANULARITIES: CostTimeGranularity[] = ['month', 'quarter', 'year'];
+
+export class CostByTimeQueryRequest {
+  @ApiProperty({
+    example: 'month',
+    enum: COST_GRANULARITIES,
+    description: 'Don vi gom nhom thoi gian',
+  })
+  @IsIn(COST_GRANULARITIES)
+  granularity!: CostTimeGranularity;
+}
+
+export class CostByTimeItemResponseBody {
+  @ApiProperty({ example: '2026-04' })
+  period!: string;
+
+  @ApiProperty({ example: 1500000 })
+  totalCost!: number;
+}
+
+export class CostByTimeResponseBody {
+  @ApiProperty({
+    example: 'month',
+    enum: COST_GRANULARITIES,
+  })
+  granularity!: CostTimeGranularity;
+
+  @ApiProperty({ type: [CostByTimeItemResponseBody] })
+  items!: CostByTimeItemResponseBody[];
 }

@@ -2,7 +2,6 @@ export * from './types/supabase';
 export * from './dto/auth.dto';
 export * from './dto/ban-giao.dto';
 export * from './dto/cau-hinh-may-tinh.dto';
-export * from './dto/dashboard.dto';
 export * from './dto/example.dto';
 export * from './dto/hang-model.dto';
 export * from './dto/he-dieu-hanh.dto';
@@ -14,6 +13,22 @@ export * from './dto/phan-mem-diet-virus.dto';
 export * from './dto/phong-ban.dto';
 export * from './dto/sua-chua-bao-tri.dto';
 export * from './dto/thiet-bi.dto';
-export * from './dto/thong-ke-chi-phi.dto';
 export * from './dto/tinh-trang-thiet-bi.dto';
 export * from './dto/thu-hoi.dto';
+export * from './dto/xuat-bao-cao.dto';
+export type {
+  DashboardOverviewDto,
+  DashboardDepartmentDistributionItemDto,
+  DashboardDepartmentDistributionDto,
+  DashboardRecentEventType,
+  DashboardRecentEventDto,
+  DashboardRecentEventsDto,
+} from './dto/dashboard.dto';
+export type {
+  CostTimeGranularity,
+  CostStatsItemDto,
+  CostStatsResponseDto,
+  CostByTimeItemDto,
+  CostByTimeResponseDto,
+  CostByTimeQueryDto,
+} from './dto/thong-ke-chi-phi.dto';

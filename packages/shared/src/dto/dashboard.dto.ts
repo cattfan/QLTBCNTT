@@ -32,3 +32,19 @@ export interface DashboardRecentEventDto {
 export interface DashboardRecentEventsDto {
   items: DashboardRecentEventDto[];
 }
+
+export type CostTimeGranularity = 'month' | 'quarter' | 'year';
+
+export interface CostByTimeItemDto {
+  period: string;
+  totalCost: number;
+}
+
+export interface CostByTimeResponseDto {
+  granularity: CostTimeGranularity;
+  items: CostByTimeItemDto[];
+}
+
+export interface CostByTimeQueryDto {
+  granularity: CostTimeGranularity;
+}
