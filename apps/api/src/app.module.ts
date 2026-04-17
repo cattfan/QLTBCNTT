@@ -5,6 +5,7 @@ import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { BanGiaoModule } from './ban-giao/ban-giao.module';
 import { CauHinhMayTinhModule } from './cau-hinh-may-tinh/cau-hinh-may-tinh.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 import { DatabaseModule } from './database';
 import { HeDieuHanhModule } from './he-dieu-hanh/he-dieu-hanh.module';
 import { HangModelModule } from './hang-model/hang-model.module';
@@ -28,6 +29,7 @@ import { ThuHoiModule } from './thu-hoi/thu-hoi.module';
     }),
     BanGiaoModule,
     CauHinhMayTinhModule,
+    DashboardModule,
     DatabaseModule,
     AuthModule,
     HeDieuHanhModule,

@@ -2,6 +2,7 @@ export * from './types/supabase';
 export * from './dto/auth.dto';
 export * from './dto/ban-giao.dto';
 export * from './dto/cau-hinh-may-tinh.dto';
+export * from './dto/dashboard.dto';
 export * from './dto/example.dto';
 export * from './dto/hang-model.dto';
 export * from './dto/he-dieu-hanh.dto';
