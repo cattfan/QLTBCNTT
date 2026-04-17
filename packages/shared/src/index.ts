@@ -13,5 +13,6 @@ export * from './dto/phan-mem-diet-virus.dto';
 export * from './dto/phong-ban.dto';
 export * from './dto/sua-chua-bao-tri.dto';
 export * from './dto/thiet-bi.dto';
+export * from './dto/thong-ke-chi-phi.dto';
 export * from './dto/tinh-trang-thiet-bi.dto';
 export * from './dto/thu-hoi.dto';

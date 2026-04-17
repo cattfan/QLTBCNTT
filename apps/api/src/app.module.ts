@@ -16,6 +16,7 @@ import { PhanMemDietVirusModule } from './phan-mem-diet-virus/phan-mem-diet-viru
 import { PhongBanModule } from './phong-ban/phong-ban.module';
 import { SuaChuaBaoTriModule } from './sua-chua-bao-tri/sua-chua-bao-tri.module';
 import { ThietBiModule } from './thiet-bi/thiet-bi.module';
+import { ThongKeChiPhiModule } from './thong-ke-chi-phi/thong-ke-chi-phi.module';
 import { TinhTrangThietBiModule } from './tinh-trang-thiet-bi/tinh-trang-thiet-bi.module';
 import { ThuHoiModule } from './thu-hoi/thu-hoi.module';
 
@@ -39,6 +40,7 @@ import { ThuHoiModule } from './thu-hoi/thu-hoi.module';
     PhongBanModule,
     SuaChuaBaoTriModule,
     ThietBiModule,
+    ThongKeChiPhiModule,
     TinhTrangThietBiModule,
     ThuHoiModule,
   ],
